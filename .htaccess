@@ -1,6 +1,11 @@
 # Enable URL Rewriting
 RewriteEngine On
 
+<Files .env>
+    Order allow,deny
+    Deny from all
+</Files>
+
 # Remove .php extension from URLs
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_FILENAME}\.php -f

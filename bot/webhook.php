@@ -443,6 +443,8 @@ function handleQuantitySelection($bot, $chatId, $productId, $pdo, $messageId, $s
         return;
     }
     
+    $selectedQty = max(1, min($selectedQty, $product['stock']));
+
     // Render quantity selector
     $result = ProductTemplate::renderQuantitySelector($product, $selectedQty);
     sendWithCleanup($bot, $chatId, $result['message'], $result['keyboard'], $messageId);

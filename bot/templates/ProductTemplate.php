@@ -77,19 +77,18 @@ class ProductTemplate {
         $name = htmlspecialchars($product['name']);
         $price = $product['price'];
         $stock = $product['stock'] ?? 0;
-        $maxQty = min($stock, 10); // Max 10 items
+        $maxQty = $stock;
+        $selectedQty = max(1, min($selectedQty, $maxQty));
         
-        $msg = "🔢 <b>CHỌN SỐ LƯỢNG</b>\n\n";
+        $msg = "🔢 <b>Chọn số lượng bạn muốn mua:</b>\n\n";
         $msg .= "📦 Sản phẩm: <b>{$name}</b>\n";
         $msg .= "💰 Giá: " . BotMessageFormatter::formatPrice($price) . "/cái\n";
-        $msg .= "📊 Tối đa: {$maxQty} cái\n\n";
+        $msg .= "📊 Kho: <b>{$stock}</b> cái\n\n";
         $msg .= "━━━━━━━━━━━━━━━━━━━\n";
         $msg .= "🛒 Số lượng: <b>{$selectedQty}</b>\n";
         $msg .= "💵 Tổng tiền: <b>" . BotMessageFormatter::formatPrice($price * $selectedQty) . "</b>\n";
-        $msg .= "━━━━━━━━━━━━━━━━━━━\n\n";
-        $msg .= "Chọn số lượng bên dưới 👇";
+        $msg .= "━━━━━━━━━━━━━━━━━━━\n";
         
-        // Create keyboard
         $keyboard = self::getQuantityKeyboard($product['id'], $maxQty, $selectedQty);
         
         return ['message' => $msg, 'keyboard' => $keyboard];
@@ -182,37 +181,39 @@ class ProductTemplate {
      */
     private static function getQuantityKeyboard($productId, $maxQty, $selectedQty) {
         $keyboard = [];
-        
-        // Quantity buttons (5 per row)
-        $row = [];
-        for ($i = 1; $i <= min($maxQty, 10); $i++) {
-            $emoji = $i == $selectedQty ? '✅' : '';
-            $row[] = [
-                'text' => $emoji . $i . ($i == $selectedQty ? '️⃣' : '️⃣'),
-                'callback_data' => "qty_{$productId}_{$i}"
-            ];
-            
-            // 5 buttons per row
-            if (count($row) == 5 || $i == min($maxQty, 10)) {
-                $keyboard[] = $row;
-                $row = [];
-            }
-        }
-        
-        // Confirm button
+
+        $decQty = max(1, $selectedQty - 1);
+        $incQty = min($maxQty, $selectedQty + 1);
+
+        // Row 1: [-] [qty] [+]
         $keyboard[] = [
-            [
-                'text' => '✅ Xác nhận mua',
-                'callback_data' => "confirm_buy_{$productId}_{$selectedQty}"
-            ]
+            ['text' => '➖', 'callback_data' => "qty_{$productId}_{$decQty}"],
+            ['text' => "[ {$selectedQty} ]", 'callback_data' => 'noop'],
+            ['text' => '➕', 'callback_data' => "qty_{$productId}_{$incQty}"],
         ];
-        
-        // Back button
+
+        // Row 2: quick-add buttons
+        $quickAdds = [10, 20, 50, 100];
+        $quickRow = [];
+        foreach ($quickAdds as $amount) {
+            $newQty = min($maxQty, $selectedQty + $amount);
+            $quickRow[] = [
+                'text' => "+{$amount}",
+                'callback_data' => "qty_{$productId}_{$newQty}",
+            ];
+        }
+        $keyboard[] = $quickRow;
+
+        // Row 3: confirm
         $keyboard[] = [
-            ['text' => '◀️ Quay lại', 'callback_data' => 'product_' . $productId],
+            ['text' => '✅ Xác nhận', 'callback_data' => "confirm_buy_{$productId}_{$selectedQty}"]
+        ];
+
+        // Row 4: cancel
+        $keyboard[] = [
             ['text' => '❌ Hủy', 'callback_data' => 'show_products']
         ];
-        
+
         return $keyboard;
     }
 }

@@ -9,9 +9,15 @@
 </head>
 <body>
     <?php
+
+    // define('IN_SITE', true);
+
     require_once __DIR__ . '/config/db.php';
     require_once __DIR__ . '/includes/auth.php';
+    require_once __DIR__ . '/libs/db.php';
     requireLogin();
+
+    $dbHelper = new DB();
 
     $success = '';
     $error = '';
