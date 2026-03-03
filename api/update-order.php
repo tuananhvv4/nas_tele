@@ -20,7 +20,7 @@ try {
     // ===================== CẬP NHẬT ĐƠN HÀNG =====================
     if ($action === 'update') {
         $orderId     = (int)($input['order_id'] ?? 0);
-        $accountData = trim($input['account_data'] ?? '');
+        $accountData = trim($input['account_data'] ?? $_POST['account_data'] ?? '');
         $status      = $input['status'] ?? '';
         $price       = $input['price'] ?? null;
 
