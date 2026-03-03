@@ -162,7 +162,7 @@
                     <label class="form-label">Số sản phẩm mỗi trang</label>
                     <input type="number" class="form-control" name="items_per_page" 
                            value="<?= $settings['items_per_page'] ?>" 
-                           min="3" max="10" required>
+                           min="3" required>
                     <small style="color: var(--text-secondary); margin-top: 6px; display: block;">
                         Khuyến nghị: 5 sản phẩm
                     </small>
