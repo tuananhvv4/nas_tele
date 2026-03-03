@@ -289,9 +289,9 @@
                                     <td><?= $order['quantity'] ?></td>
                                     <td><strong><?= number_format($order['price'], 2) ?></strong> VNĐ</td>
                                     <td>
-                                        <?php if ($order['status'] === 'completed'): ?>
+                                        <?php if ($order['payment_status'] === 'completed'): ?>
                                             <span class="badge badge-success">✅ Hoàn Thành</span>
-                                        <?php elseif ($order['status'] === 'pending'): ?>
+                                        <?php elseif ($order['payment_status'] === 'pending'): ?>
                                             <span class="badge badge-warning">⏳ Chờ thanh toán</span>
                                         <?php else: ?>
                                             <span class="badge badge-danger">❌ Huỷ</span>
