@@ -287,7 +287,7 @@
                                         </a>
                                     </td>
                                     <td><?= $order['quantity'] ?></td>
-                                    <td><strong><?= number_format($order['price'], 2) ?></strong> VNĐ</td>
+                                    <td><strong><?= number_format(intval($order['price']) * intval($order['quantity']), 2) ?></strong> VNĐ</td>
                                     <td>
                                         <?php if ($order['payment_status'] === 'completed'): ?>
                                             <span class="badge badge-success">✅ Hoàn Thành</span>
