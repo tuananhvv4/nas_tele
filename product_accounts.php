@@ -116,8 +116,8 @@
             <p>Quản lý kho accounts cho sản phẩm</p>
         </div>
         <div class="d-flex gap-2">
-            <button class="btn btn-success" onclick="showBulkUploadModal()">📤 Bulk Upload</button>
-            <button class="btn btn-primary" onclick="showAddModal()">+ Thêm Account</button>
+            <button class="btn btn-success" onclick="showBulkUploadModal()">Thêm hàng loạt</button>
+            <button class="btn btn-primary" onclick="showAddModal()">Thêm từng tài khoản</button>
         </div>
     </div>
 
@@ -150,7 +150,7 @@
                 <div class="form-group mb-0" style="flex: 1;">
                     <select class="form-select" name="status" onchange="this.form.submit()">
                         <option value="all" <?= $filterStatus === 'all' ? 'selected' : '' ?>>Tất Cả Trạng Thái</option>
-                        <option value="available" <?= $filterStatus === 'available' ? 'selected' : '' ?>>Còn Hàng</option>
+                        <option value="available" <?= $filterStatus === 'available' ? 'selected' : '' ?>>Chưa bán</option>
                         <option value="sold" <?= $filterStatus === 'sold' ? 'selected' : '' ?>>Đã Bán</option>
                     </select>
                 </div>
@@ -209,7 +209,7 @@
                                         <?php if ($account['is_sold']): ?>
                                             <span class="badge badge-danger">Đã Bán</span>
                                         <?php else: ?>
-                                            <span class="badge badge-success">Còn Hàng</span>
+                                            <span class="badge badge-success">Chưa bán</span>
                                         <?php endif; ?>
                                     </td>
                                     <td><?= htmlspecialchars($account['buyer_username'] ?? '-') ?></td>

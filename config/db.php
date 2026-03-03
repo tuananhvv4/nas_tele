@@ -4,18 +4,24 @@
  * PDO-based MySQL connection
  */
 
-// Database credentials
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'bot_tele');
-define('DB_USER', 'root');
-define('DB_PASS', 'ServBay.dev');
+
+include_once(__DIR__.'/../vendor/autoload.php');
+$dotenv = Dotenv\Dotenv::createImmutable(__DIR__.'/../');
+$dotenv->load();
+
+// Load database credentials from environment variables
+$DB_HOST = $_ENV['DB_HOST'];
+$DB_NAME = $_ENV['DB_NAME'];
+$DB_USER = $_ENV['DB_USER'];
+$DB_PASS = $_ENV['DB_PASS'];
+
 
 // Create PDO connection
 try {
     $pdo = new PDO(
-        "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
-        DB_USER,
-        DB_PASS,
+        "mysql:host=" . $DB_HOST . ";dbname=" . $DB_NAME . ";charset=utf8mb4",
+        $DB_USER,
+        $DB_PASS,
         [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,

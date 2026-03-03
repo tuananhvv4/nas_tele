@@ -11,6 +11,7 @@
     <?php
     require_once __DIR__ . '/config/db.php';
     require_once __DIR__ . '/includes/auth.php';
+    require_once __DIR__ . '/libs/helper.php';
     requireLogin();
 
     // Handle bulk delete
@@ -25,11 +26,37 @@
 
     // Get filter parameters
     $filterProduct = $_GET['product'] ?? '';
-    $filterStatus = $_GET['status'] ?? '';
+    $filterStatus  = $_GET['status'] ?? '';
+    $perPage       = (int) ($_GET['limit'] ?? 10); // 0 = tất cả
 
-    // Build query
+    // WHERE clause tái sử dụng cho cả count và query chính
+    $where        = "WHERE 1=1";
+    $filterParams = [];
+
+    if ($filterProduct) {
+        $where          .= " AND o.product_id = ?";
+        $filterParams[]  = $filterProduct;
+    }
+    if ($filterStatus) {
+        $where          .= " AND o.status = ?";
+        $filterParams[]  = $filterStatus;
+    }
+
+    // Phân trang
+    $countQuery = "SELECT COUNT(*) FROM orders o $where";
+    $pagination = paginate($pdo, $countQuery, $filterParams, $perPage);
+
+    // Build URL cơ sở giữ nguyên các filter hiện tại (không có page)
+    $baseUrlParams = array_filter([
+        'product' => $filterProduct,
+        'status'  => $filterStatus,
+        'limit'   => $perPage ?: '',
+    ]);
+    $paginationBaseUrl = 'orders.php' . (!empty($baseUrlParams) ? '?' . http_build_query($baseUrlParams) : '');
+
+    // Build query chính
     $query = "
-        SELECT o.*, 
+        SELECT o.*,
                p.name as product_name,
                u.username,
                u.telegram_id,
@@ -38,22 +65,17 @@
         LEFT JOIN products p ON o.product_id = p.id
         LEFT JOIN users u ON o.user_id = u.id
         LEFT JOIN product_accounts pa ON o.account_id = pa.id
-        WHERE 1=1
+        $where
+        ORDER BY o.created_at DESC
     ";
 
-    $params = [];
+    $params = $filterParams;
 
-    if ($filterProduct) {
-        $query .= " AND o.product_id = ?";
-        $params[] = $filterProduct;
+    if ($pagination['limit'] !== null) {
+        $query    .= " LIMIT ? OFFSET ?";
+        $params[]  = $pagination['limit'];
+        $params[]  = $pagination['offset'];
     }
-
-    if ($filterStatus) {
-        $query .= " AND o.status = ?";
-        $params[] = $filterStatus;
-    }
-
-    $query .= " ORDER BY o.created_at DESC";
 
     $stmt = $pdo->prepare($query);
     $stmt->execute($params);
@@ -67,6 +89,14 @@
         'total_orders' => $pdo->query("SELECT COUNT(*) FROM orders")->fetchColumn(),
         'completed_orders' => $pdo->query("SELECT COUNT(*) FROM orders WHERE payment_status = 'completed'")->fetchColumn(),
         'total_revenue' => $pdo->query("SELECT COALESCE(SUM(total_price), 0) FROM orders WHERE payment_status = 'completed'")->fetchColumn(),
+    ];
+
+    $limitStatements = [
+        '10'  => '10',
+        '20'  => '20',
+        '50'  => '50',
+        '100' => '100',
+        '0'   => 'Tất cả',
     ];
 
     $pageTitle = 'Orders';
@@ -130,6 +160,16 @@
                         <option value="failed" <?= $filterStatus === 'failed' ? 'selected' : '' ?>>Thất Bại</option>
                     </select>
                 </div>
+                <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                    <label class="form-label">Số lượng hiển thị</label>
+                    <select name="limit" class="form-select">
+                        <?php foreach ($limitStatements as $value => $label): ?>
+                            <option value="<?= $value ?>" <?= $perPage == $value ? 'selected' : '' ?>>
+                                <?= $label ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
                 <div style="display: flex; align-items: flex-end;">
                     <button type="submit" class="btn btn-primary">Lọc</button>
                     <?php if ($filterProduct || $filterStatus): ?>
@@ -165,6 +205,7 @@
                                 <th>
                                     <input type="checkbox" id="selectAll" onchange="toggleAll(this)">
                                 </th>
+                                <th>Số thứ tự</th>
                                 <th>Mã Đơn</th>
                                 <th>Sản Phẩm</th>
                                 <th>User Telegram</th>
@@ -175,38 +216,56 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($orders as $order): ?>
+                            <?php
+                            $i = $pagination['offset'];
+                            foreach ($orders as $order):
+                                $i++;
+                                ?>
                                 <tr>
                                     <td>
                                         <input type="checkbox" name="order_ids[]" value="<?= $order['id'] ?>" class="order-checkbox" onchange="updateCount()">
                                     </td>
+                                    <td><?= $i ?></td>
                                     <td><strong>#<?= str_pad($order['id'], 6, '0', STR_PAD_LEFT) ?></strong></td>
                                     <td><?= htmlspecialchars($order['product_name']) ?></td>
                                     <td>
                                         <?php if ($order['username']): ?>
-                                            <strong>@<?= htmlspecialchars($order['username']) ?></strong><br>
+                                            <a href="<?= 'http://t.me/' . $order['username'] ?>" target="_blank"><strong>@<?= htmlspecialchars($order['username']) ?></strong></a>
+                                            <br>
                                             <small style="color: var(--text-secondary);">ID: <?= $order['telegram_id'] ?></small>
                                         <?php else: ?>
                                             <span style="color: var(--text-secondary);">ID: <?= $order['telegram_id'] ?></span>
                                         <?php endif; ?>
                                     </td>
                                     <td>
+                                        <a href="javascript:void(0)" class="order-detail-link"
+                                           data-order-id="<?= $order['id'] ?>"
+                                           data-product-name="<?= htmlspecialchars($order['product_name'] ?? '') ?>"
+                                           data-username="<?= htmlspecialchars($order['username'] ?? '') ?>"
+                                           data-telegram-id="<?= htmlspecialchars($order['telegram_id'] ?? '') ?>"
+                                           data-account-data="<?= htmlspecialchars($order['account_data'] ?? '') ?>"
+                                           data-price="<?= $order['price'] ?? 0 ?>"
+                                           data-status="<?= htmlspecialchars($order['status'] ?? '') ?>"
+                                           data-payment-status="<?= htmlspecialchars($order['payment_status'] ?? '') ?>"
+                                           data-created-at="<?= $order['created_at'] ?? '' ?>">
                                         <?php if ($order['account_data']): ?>
-                                            <code style="font-size: 0.85rem; background: rgba(102, 126, 234, 0.1); padding: 4px 8px; border-radius: 4px;">
-                                                <?= htmlspecialchars(substr($order['account_data'], 0, 30)) ?>...
+                                            <code style="font-size: 0.85rem; background: rgba(102, 126, 234, 0.1); padding: 4px 8px; border-radius: 4px; cursor: pointer; transition: background 0.2s;">
+                                                <?= htmlspecialchars(substr($order['account_data'], 0, 30)) ?><?= strlen($order['account_data']) > 30 ? '...' : '' ?>
                                             </code>
+                                            <span style="font-size: 0.7rem; color: var(--primary); display: block; margin-top: 2px;">✏️ Xem / Sửa</span>
                                         <?php else: ?>
-                                            <span style="color: var(--text-secondary);">N/A</span>
+                                            <span style="color: var(--text-secondary); cursor: pointer;">N/A <span style="font-size: 0.7rem;">✏️</span></span>
                                         <?php endif; ?>
+                                        </a>
                                     </td>
-                                    <td><strong>$<?= number_format($order['price'], 2) ?></strong></td>
+                                    <td><strong><?= number_format($order['price'], 2) ?></strong> VNĐ</td>
                                     <td>
                                         <?php if ($order['status'] === 'completed'): ?>
                                             <span class="badge badge-success">✅ Hoàn Thành</span>
                                         <?php elseif ($order['status'] === 'pending'): ?>
-                                            <span class="badge badge-warning">⏳ Đang Xử Lý</span>
+                                            <span class="badge badge-warning">⏳ Chờ thanh toán</span>
                                         <?php else: ?>
-                                            <span class="badge badge-danger">❌ Thất Bại</span>
+                                            <span class="badge badge-danger">❌ Huỷ</span>
                                         <?php endif; ?>
                                     </td>
                                     <td>
@@ -218,7 +277,9 @@
                         </tbody>
                     </table>
                     </form>
-                    
+
+                    <?= renderPagination($pagination, $paginationBaseUrl) ?>
+
                     <script>
                     function toggleAll(source) {
                         const checkboxes = document.querySelectorAll('input[name="order_ids[]"]');
@@ -235,6 +296,82 @@
                     </script>
                 </div>
             <?php endif; ?>
+        </div>
+    </div>
+
+    <!-- Order Detail Modal -->
+    <div class="modal" id="orderDetailModal">
+        <div class="modal-dialog" style="max-width: 650px;">
+            <div class="modal-header">
+                <h5 id="modalTitle">📋 Chi Tiết Đơn Hàng</h5>
+            </div>
+            <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                <!-- Order Info (readonly) -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; padding: 16px; background: rgba(0,0,0,0.2); border-radius: 12px;">
+                    <div>
+                        <span style="color: var(--text-secondary); font-size: 0.8rem;">Mã Đơn</span>
+                        <div id="modalOrderCode" style="font-weight: 700; font-size: 1.1rem; color: var(--primary);"></div>
+                    </div>
+                    <div>
+                        <span style="color: var(--text-secondary); font-size: 0.8rem;">Sản Phẩm</span>
+                        <div id="modalProductName" style="font-weight: 600;"></div>
+                    </div>
+                    <div>
+                        <span style="color: var(--text-secondary); font-size: 0.8rem;">Khách Hàng</span>
+                        <div id="modalCustomer" style="font-weight: 600;"></div>
+                    </div>
+                    <div>
+                        <span style="color: var(--text-secondary); font-size: 0.8rem;">Thời Gian</span>
+                        <div id="modalCreatedAt" style="font-weight: 500; font-size: 0.9rem;"></div>
+                    </div>
+                </div>
+
+                <!-- Editable fields -->
+                <div class="form-group">
+                    <label class="form-label">🔑 Thông Tin Tài Khoản</label>
+                    <textarea id="modalAccountData" class="form-control" rows="3" placeholder="username password 2FA..."></textarea>
+                    <small style="color: var(--text-secondary); font-size: 0.8rem;">Định dạng: username password [2FA]. Mỗi tài khoản 1 dòng.</small>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div class="form-group">
+                        <label class="form-label">💰 Giá</label>
+                        <input type="number" id="modalPrice" class="form-control" step="0.01" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">📊 Trạng Thái</label>
+                        <select id="modalStatus" class="form-select">
+                            <option value="completed">✅ Hoàn Thành</option>
+                            <option value="pending">⏳ Đang Xử Lý</option>
+                            <option value="cancelled">❌ Huỷ</option>
+                        </select>
+                    </div>
+                </div>
+
+                <hr style="border-color: var(--border-color); margin: 20px 0;">
+
+                <!-- Notification section -->
+                <div class="form-group">
+                    <label class="form-label">📨 Tin Nhắn Thông Báo <span style="color: var(--text-secondary); font-weight: 400; font-size: 0.85rem;">(tùy chọn)</span></label>
+                    <textarea id="modalNotifyMessage" class="form-control" rows="4" placeholder="Để trống sẽ gửi tin nhắn mặc định kèm thông tin tài khoản đã cập nhật..."></textarea>
+                    <small style="color: var(--text-secondary); font-size: 0.8rem;">Hỗ trợ HTML: &lt;b&gt;, &lt;i&gt;, &lt;code&gt;. Để trống = tin nhắn tự động.</small>
+                </div>
+
+                <!-- Status messages -->
+                <div id="modalAlert" style="display: none; padding: 12px 16px; border-radius: 10px; margin-top: 12px; font-size: 0.9rem;"></div>
+            </div>
+            <div class="modal-footer" style="flex-direction: row; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary" onclick="closeOrderModal()" style="width: auto;">Đóng</button>
+                <button type="button" class="btn btn-primary" id="btnSaveOrder" onclick="saveOrder()" style="width: auto;">
+                    💾 Lưu Thay Đổi
+                </button>
+                <button type="button" class="btn btn-info" id="btnNotify" onclick="notifyCustomer()" style="width: auto; background: var(--info);">
+                    📨 Gửi Thông Báo
+                </button>
+                <button type="button" class="btn btn-success" id="btnSaveAndNotify" onclick="saveAndNotify()" style="width: auto;">
+                    💾📨 Lưu & Gửi
+                </button>
+            </div>
         </div>
     </div>
 
@@ -261,6 +398,230 @@
                 flex: 0 0 100%;
             }
         }
+        .order-detail-link {
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+        .order-detail-link:hover code {
+            background: rgba(102, 126, 234, 0.25) !important;
+        }
+        .btn-loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+        .btn-loading::after {
+            content: ' ⏳';
+        }
     </style>
+
+    <script>
+    let currentOrderId = null;
+
+    // Mở modal khi click vào account data
+    document.querySelectorAll('.order-detail-link').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const d = this.dataset;
+            currentOrderId = d.orderId;
+
+            document.getElementById('modalTitle').textContent = '📋 Chi Tiết Đơn Hàng #' + String(d.orderId).padStart(6, '0');
+            document.getElementById('modalOrderCode').textContent = '#' + String(d.orderId).padStart(6, '0');
+            document.getElementById('modalProductName').textContent = d.productName || 'N/A';
+
+            // Customer info
+            let customer = '';
+            if (d.username) {
+                customer = '@' + d.username + ' (ID: ' + d.telegramId + ')';
+            } else {
+                customer = 'ID: ' + (d.telegramId || 'N/A');
+            }
+            document.getElementById('modalCustomer').textContent = customer;
+            document.getElementById('modalCreatedAt').textContent = d.createdAt || 'N/A';
+
+            // Editable fields
+            document.getElementById('modalAccountData').value = d.accountData || '';
+            document.getElementById('modalPrice').value = d.price || 0;
+            document.getElementById('modalStatus').value = d.status || 'completed';
+            document.getElementById('modalNotifyMessage').value = '';
+
+            // Reset alert
+            hideAlert();
+
+            // Show modal
+            document.getElementById('orderDetailModal').classList.add('show');
+        });
+    });
+
+    function closeOrderModal() {
+        document.getElementById('orderDetailModal').classList.remove('show');
+        currentOrderId = null;
+    }
+
+    // Close modal on overlay click
+    document.getElementById('orderDetailModal').addEventListener('click', function(e) {
+        if (e.target === this) closeOrderModal();
+    });
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeOrderModal();
+    });
+
+    function showAlert(message, type = 'success') {
+        const alert = document.getElementById('modalAlert');
+        alert.style.display = 'block';
+        alert.textContent = message;
+        if (type === 'success') {
+            alert.style.background = 'rgba(16, 185, 129, 0.15)';
+            alert.style.color = 'var(--success)';
+            alert.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+        } else {
+            alert.style.background = 'rgba(239, 68, 68, 0.15)';
+            alert.style.color = 'var(--danger)';
+            alert.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+        }
+    }
+
+    function hideAlert() {
+        document.getElementById('modalAlert').style.display = 'none';
+    }
+
+    function setButtonLoading(btnId, loading) {
+        const btn = document.getElementById(btnId);
+        if (loading) {
+            btn.classList.add('btn-loading');
+            btn.disabled = true;
+        } else {
+            btn.classList.remove('btn-loading');
+            btn.disabled = false;
+        }
+    }
+
+    async function apiCall(payload) {
+        const res = await fetch('api/update-order.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        return await res.json();
+    }
+
+    async function saveOrder() {
+        if (!currentOrderId) return;
+        setButtonLoading('btnSaveOrder', true);
+        hideAlert();
+
+        try {
+            const result = await apiCall({
+                action: 'update',
+                order_id: currentOrderId,
+                account_data: document.getElementById('modalAccountData').value,
+                price: document.getElementById('modalPrice').value,
+                status: document.getElementById('modalStatus').value,
+            });
+
+            if (result.success) {
+                showAlert('✅ ' + result.message, 'success');
+                // Cập nhật lại data attribute trên link để lần mở sau thấy dữ liệu mới
+                const link = document.querySelector(`.order-detail-link[data-order-id="${currentOrderId}"]`);
+                if (link) {
+                    link.dataset.accountData = document.getElementById('modalAccountData').value;
+                    link.dataset.price = document.getElementById('modalPrice').value;
+                    link.dataset.status = document.getElementById('modalStatus').value;
+                    // Cập nhật hiển thị trong table
+                    const code = link.querySelector('code');
+                    if (code) {
+                        const newData = document.getElementById('modalAccountData').value;
+                        code.textContent = newData.length > 30 ? newData.substring(0, 30) + '...' : newData;
+                    }
+                }
+            } else {
+                showAlert('❌ ' + result.message, 'error');
+            }
+        } catch (err) {
+            showAlert('❌ Lỗi kết nối: ' + err.message, 'error');
+        }
+
+        setButtonLoading('btnSaveOrder', false);
+    }
+
+    async function notifyCustomer() {
+        if (!currentOrderId) return;
+        setButtonLoading('btnNotify', true);
+        hideAlert();
+
+        try {
+            const result = await apiCall({
+                action: 'notify',
+                order_id: currentOrderId,
+                message: document.getElementById('modalNotifyMessage').value,
+            });
+
+            if (result.success) {
+                showAlert('✅ ' + result.message, 'success');
+            } else {
+                showAlert('❌ ' + result.message, 'error');
+            }
+        } catch (err) {
+            showAlert('❌ Lỗi kết nối: ' + err.message, 'error');
+        }
+
+        setButtonLoading('btnNotify', false);
+    }
+
+    async function saveAndNotify() {
+        if (!currentOrderId) return;
+        setButtonLoading('btnSaveAndNotify', true);
+        hideAlert();
+
+        try {
+            // Step 1: Save
+            const saveResult = await apiCall({
+                action: 'update',
+                order_id: currentOrderId,
+                account_data: document.getElementById('modalAccountData').value,
+                price: document.getElementById('modalPrice').value,
+                status: document.getElementById('modalStatus').value,
+            });
+
+            if (!saveResult.success) {
+                showAlert('❌ Lưu thất bại: ' + saveResult.message, 'error');
+                setButtonLoading('btnSaveAndNotify', false);
+                return;
+            }
+
+            // Cập nhật link data
+            const link = document.querySelector(`.order-detail-link[data-order-id="${currentOrderId}"]`);
+            if (link) {
+                link.dataset.accountData = document.getElementById('modalAccountData').value;
+                link.dataset.price = document.getElementById('modalPrice').value;
+                link.dataset.status = document.getElementById('modalStatus').value;
+                const code = link.querySelector('code');
+                if (code) {
+                    const newData = document.getElementById('modalAccountData').value;
+                    code.textContent = newData.length > 30 ? newData.substring(0, 30) + '...' : newData;
+                }
+            }
+
+            // Step 2: Notify
+            const notifyResult = await apiCall({
+                action: 'notify',
+                order_id: currentOrderId,
+                message: document.getElementById('modalNotifyMessage').value,
+            });
+
+            if (notifyResult.success) {
+                showAlert('✅ Đã lưu và gửi thông báo thành công!', 'success');
+            } else {
+                showAlert('⚠️ Đã lưu nhưng gửi thông báo thất bại: ' + notifyResult.message, 'error');
+            }
+        } catch (err) {
+            showAlert('❌ Lỗi: ' + err.message, 'error');
+        }
+
+        setButtonLoading('btnSaveAndNotify', false);
+    }
+    </script>
 </body>
 </html>

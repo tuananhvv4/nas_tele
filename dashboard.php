@@ -47,32 +47,40 @@
     <!-- Stats Grid -->
     <div class="row g-4 mb-4">
         <div class="col-md-3">
-            <div class="stat-card">
-                <div class="stat-icon">👥</div>
-                <div class="stat-value"><?= $stats['total_users'] ?></div>
-                <div class="stat-label">Người Dùng</div>
-            </div>
+            <a href="/users">
+                <div class="stat-card">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-value"><?= $stats['total_users'] ?></div>
+                    <div class="stat-label">Người Dùng</div>
+                </div>
+            </a>
         </div>
         <div class="col-md-3">
-            <div class="stat-card">
-                <div class="stat-icon">📦</div>
-                <div class="stat-value"><?= $stats['total_products'] ?></div>
-                <div class="stat-label">Sản Phẩm</div>
-            </div>
+            <a href="/products">
+                <div class="stat-card">
+                    <div class="stat-icon">📦</div>
+                    <div class="stat-value"><?= $stats['total_products'] ?></div>
+                    <div class="stat-label">Sản Phẩm</div>
+                </div>
+            </a>
         </div>
         <div class="col-md-3">
-            <div class="stat-card">
-                <div class="stat-icon">🔑</div>
-                <div class="stat-value"><?= $stats['total_accounts'] ?></div>
-                <div class="stat-label">Accounts Còn</div>
-            </div>
+            <a href="/product_accounts">
+                <div class="stat-card">
+                    <div class="stat-icon">🔑</div>
+                    <div class="stat-value"><?= $stats['total_accounts'] ?></div>
+                    <div class="stat-label">Accounts Còn</div>
+                </div>
+            </a>
         </div>
         <div class="col-md-3">
-            <div class="stat-card">
-                <div class="stat-icon">💰</div>
-                <div class="stat-value">$<?= number_format($stats['total_revenue'], 2) ?></div>
-                <div class="stat-label">Tổng Doanh Thu</div>
-            </div>
+            <a href="/orders">
+                <div class="stat-card">
+                    <div class="stat-icon">💰</div>
+                    <div class="stat-value"><?= number_format($stats['total_revenue'], 2) ?> VNĐ</div>
+                    <div class="stat-label">Tổng Doanh Thu</div>
+                </div>
+            </a>
         </div>
     </div>
 
@@ -130,7 +138,7 @@
                                     <td>#<?= $order['id'] ?></td>
                                     <td><?= htmlspecialchars($order['product_name']) ?></td>
                                     <td><?= htmlspecialchars($order['username'] ?? 'User #' . $order['telegram_id']) ?></td>
-                                    <td>$<?= number_format($order['price'], 2) ?></td>
+                                    <td><?= number_format($order['price'], 2) ?> VNĐ</td>
                                     <td>
                                         <?php if ($order['status'] === 'completed'): ?>
                                             <span class="badge badge-success">Hoàn Thành</span>

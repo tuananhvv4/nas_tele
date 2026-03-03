@@ -57,7 +57,7 @@ function logMessage($message) {
         $description = (string)$trans['description'];
 
         // kiểm tra xem transaction_code có nằm trong description không, nếu có => true
-        if (stripos($description, $transactionCode) !== false) {
+        if (stripos($description, $transactionCode) !== false && $order['total_price'] == $trans['amount']) {
             return true;
         }
     }
