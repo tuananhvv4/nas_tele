@@ -324,17 +324,18 @@ class SePay {
             $accounts = $accountStmt->fetchAll(PDO::FETCH_COLUMN);
             
             if (count($accounts) >= $quantity) {
-                // Assign first account to order (for backward compatibility)
-                $this->db->prepare("UPDATE orders SET account_id = ? WHERE id = ?")->execute([$accounts[0], $orderId]);
-                
-                // Mark all accounts as sold AND link them to this order
-                foreach ($accounts as $accountId) {
-                    $this->db->prepare("
-                        UPDATE product_accounts 
-                        SET is_sold = 1, sold_at = NOW(), order_id = ? 
-                        WHERE id = ?
-                    ")->execute([$orderId, $accountId]);
-                }
+                // Lưu tất cả account IDs vào order (chuỗi: "5,12,18")
+                $accountIdsStr = implode(',', $accounts);
+                $this->db->prepare("UPDATE orders SET account_id = ? WHERE id = ?")->execute([$accountIdsStr, $orderId]);
+
+                // Đánh dấu sold + gán order_id cho từng product_account
+                $placeholders = implode(',', array_fill(0, count($accounts), '?'));
+                $updateStmt = $this->db->prepare("
+                    UPDATE product_accounts 
+                    SET is_sold = 1, sold_at = NOW(), order_id = ? 
+                    WHERE id IN ($placeholders)
+                ");
+                $updateStmt->execute(array_merge([$orderId], $accounts));
             }
         }
         

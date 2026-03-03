@@ -97,7 +97,11 @@ function handleWalletPayment($bot, $chatId, $userId, $productId, $quantity, $pdo
             ");
             $updateStmt->execute([$user['id'], $orderId, $account['id']]);
         }
-        
+
+        // Lưu tất cả account IDs vào order (chuỗi: "5,12,18")
+        $accountIdsStr = implode(',', array_column($accounts, 'id'));
+        $pdo->prepare("UPDATE orders SET account_id = ? WHERE id = ?")->execute([$accountIdsStr, $orderId]);
+
         $pdo->commit();
         
         // Prepare account data for template
