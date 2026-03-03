@@ -184,7 +184,7 @@ class TelegramNotifier {
             $this->bot->sendMessage($chatId, $message, $options);
 
             // Gửi file .txt chứa thông tin tài khoản
-            $this->sendAccountFile($chatId, $orderData, $product, $accountsData, $keyboard);
+            $this->sendAccountFile($chatId, $orderData, $product, $accountsData);
 
             error_log("Account sent to user: Order #{$order['id']}, Telegram ID: {$chatId}");
             return true;
@@ -198,7 +198,7 @@ class TelegramNotifier {
     /**
      * Gửi file .txt chứa thông tin tài khoản cho khách
      */
-    private function sendAccountFile($chatId, $orderData, $product, $accountsData, $keyboard = []) {
+    private function sendAccountFile($chatId, $orderData, $product, $accountsData) {
         try {
             $orderCode = str_pad($orderData['id'], 6, '0', STR_PAD_LEFT);
             $tmpFile = sys_get_temp_dir() . "/order_{$orderCode}_accounts.txt";
@@ -231,9 +231,6 @@ class TelegramNotifier {
             $caption .= "📦 " . ($product['name'] ?? '') . " × " . ($orderData['quantity'] ?? 1);
 
             $options = ['parse_mode' => 'HTML'];
-            if (!empty($keyboard)) {
-                $options['reply_markup'] = json_encode(['inline_keyboard' => $keyboard]);
-            }
 
             $this->bot->sendDocument($chatId, $tmpFile, $caption, $options);
             @unlink($tmpFile);
@@ -340,9 +337,6 @@ function sendAccountFileTelegram($bot, $chatId, $orderId, $productName, $quantit
         $caption .= "📦 {$productName} × {$quantity}";
 
         $options = ['parse_mode' => 'HTML'];
-        if (!empty($keyboard)) {
-            $options['reply_markup'] = json_encode(['inline_keyboard' => $keyboard]);
-        }
 
         $bot->sendDocument($chatId, $tmpFile, $caption, $options);
         @unlink($tmpFile);

@@ -74,6 +74,11 @@ try {
         $product['price']
     ]);
 
+    $orderId = $pdo->lastInsertId();
+
+    // Gán order_id cho product_account
+    $pdo->prepare("UPDATE product_accounts SET order_id = ? WHERE id = ?")->execute([$orderId, $account['id']]);
+
     // Commit transaction
     $pdo->commit();
 

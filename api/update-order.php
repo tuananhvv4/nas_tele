@@ -226,15 +226,13 @@ try {
         $fileSent = false;
         if (!empty($allAccounts)) {
             require_once __DIR__ . '/../includes/telegram.php';
-            $fileKeyboard = $keyboard['inline_keyboard'];
             $fileSent = sendAccountFileTelegram(
                 $bot,
                 $order['telegram_id'],
                 $order['id'],
                 $order['product_name'] ?? 'N/A',
                 $order['quantity'] ?? 1,
-                $allAccounts,
-                $fileKeyboard
+                $allAccounts
             );
         }
 

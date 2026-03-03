@@ -681,10 +681,9 @@ function handleMyOrders($bot, $chatId, $userId, $pdo, $messageId = null) {
 function handleOrderDetail($bot, $chatId, $orderId, $pdo, $messageId) {
     // Get order
     $stmt = $pdo->prepare("
-        SELECT o.*, p.name as product_name, pa.account_data
+        SELECT o.*, p.name as product_name
         FROM orders o
         JOIN products p ON o.product_id = p.id
-        LEFT JOIN product_accounts pa ON o.account_id = pa.id
         WHERE o.id = ?
     ");
     $stmt->execute([$orderId]);
@@ -693,7 +692,13 @@ function handleOrderDetail($bot, $chatId, $orderId, $pdo, $messageId) {
     if (!$order) {
         return;
     }
-    
+
+    // Lấy tất cả accounts theo order_id
+    $accStmt = $pdo->prepare("SELECT account_data FROM product_accounts WHERE order_id = ? ORDER BY id ASC");
+    $accStmt->execute([$orderId]);
+    $accounts = $accStmt->fetchAll(PDO::FETCH_COLUMN);
+    $order['account_data'] = !empty($accounts) ? implode("\n", $accounts) : '';
+
     // Render order detail
     $result = OrderTemplate::renderDetail($order);
     $bot->editMessage($chatId, $messageId, $result['message'], $result['keyboard']);

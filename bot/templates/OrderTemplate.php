@@ -83,7 +83,7 @@ class OrderTemplate {
         // Additional info based on status
         if ($status === 'completed' && !empty($order['account_data'])) {
             $msg .= "🔑 <b>Tài khoản:</b>\n";
-            $msg .= "<code>{$order['account_data']}</code>\n\n";
+            $msg .= "<pre>{$order['account_data']}</pre>\n\n";
         } elseif ($status === 'pending') {
             $createdTime = strtotime($order['created_at']);
             $timeoutMinutes = 30; // From settings

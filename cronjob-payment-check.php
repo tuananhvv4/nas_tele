@@ -73,10 +73,20 @@ while ((time() - $startTime) < 55) {
                             $accounts = $accountStmt->fetchAll(PDO::FETCH_COLUMN);
                             
                             if (count($accounts) >= $quantity) {
-                                $pdo->prepare("UPDATE orders SET account_id = ? WHERE id = ?")->execute([$accounts[0], $order['id']]);
-                                $accountIds = implode(',', $accounts);
-                                $pdo->exec("UPDATE product_accounts SET is_sold = 1, sold_at = NOW() WHERE id IN ($accountIds)");
-                                logMessage("   → Account assigned");
+                                // Lưu tất cả account IDs vào order (chuỗi: "5,12,18")
+                                $accountIdsStr = implode(',', $accounts);
+                                $pdo->prepare("UPDATE orders SET account_id = ? WHERE id = ?")->execute([$accountIdsStr, $order['id']]);
+
+                                // Đánh dấu sold + gán order_id cho từng product_account
+                                $placeholders = implode(',', array_fill(0, count($accounts), '?'));
+                                $updateStmt = $pdo->prepare("
+                                    UPDATE product_accounts 
+                                    SET is_sold = 1, sold_at = NOW(), order_id = ? 
+                                    WHERE id IN ($placeholders)
+                                ");
+                                $updateStmt->execute(array_merge([$order['id']], $accounts));
+
+                                logMessage("   → " . count($accounts) . " account(s) assigned [IDs: $accountIdsStr], order_id={$order['id']}");
                             }
                         }
                         
@@ -97,10 +107,9 @@ while ((time() - $startTime) < 55) {
                         
                         // Get order with account data
                         $orderStmt = $pdo->prepare("
-                            SELECT o.*, p.name as product_name, pa.account_data
+                            SELECT o.*, p.name as product_name
                             FROM orders o
                             JOIN products p ON o.product_id = p.id
-                            LEFT JOIN product_accounts pa ON o.account_id = pa.id
                             WHERE o.id = ?
                         ");
                         $orderStmt->execute([$order['id']]);

@@ -355,10 +355,9 @@ class SePay {
         
         // Get updated order with account data
         $stmt = $this->db->prepare("
-            SELECT o.*, p.name as product_name, pa.account_data
+            SELECT o.*, p.name as product_name
             FROM orders o
             JOIN products p ON o.product_id = p.id
-            LEFT JOIN product_accounts pa ON o.account_id = pa.id
             WHERE o.id = ?
         ");
         $stmt->execute([$orderId]);
