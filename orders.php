@@ -226,7 +226,8 @@
                                 <th>User Telegram</th>
                                 <th>Account</th>
                                 <th>Số lượng</th>
-                                <th>Giá</th>
+                                <th>Tổng tiền</th>
+                                <th>Đơn giá /1</th>
                                 <th>Trạng Thái</th>
                                 <th>Thời Gian</th>
                             </tr>
@@ -287,7 +288,8 @@
                                         </a>
                                     </td>
                                     <td><?= $order['quantity'] ?></td>
-                                    <td><strong><?= number_format(intval($order['price']) * intval($order['quantity']), 2) ?></strong> VNĐ</td>
+                                    <td><strong><?= number_format(intval($order['price']) * intval($order['quantity'])) ?></strong> VNĐ</td>
+                                    <td><strong><?= number_format(intval($order['price'])) ?></strong> VNĐ</td>
                                     <td>
                                         <?php if ($order['payment_status'] === 'completed'): ?>
                                             <span class="badge badge-success">✅ Hoàn Thành</span>
