@@ -225,38 +225,17 @@ try {
         // Gửi file .txt chứa thông tin tài khoản
         $fileSent = false;
         if (!empty($allAccounts)) {
-            $orderCode = str_pad($order['id'], 6, '0', STR_PAD_LEFT);
-            $tmpDir = sys_get_temp_dir();
-            $tmpFile = $tmpDir . "/order_{$orderCode}_accounts.txt";
-
-            // Tạo nội dung file
-            $fileContent  = "═══════════════════════════════════\n";
-            $fileContent .= "  ĐƠN HÀNG #{$orderCode}\n";
-            $fileContent .= "  Sản phẩm: " . ($order['product_name'] ?? 'N/A') . "\n";
-            $fileContent .= "  Số lượng: " . ($order['quantity'] ?? 1) . "\n";
-            $fileContent .= "  Ngày: " . date('d/m/Y H:i:s') . "\n";
-            $fileContent .= "═══════════════════════════════════\n\n";
-
-            foreach ($allAccounts as $idx => $acc) {
-                $fileContent .= "Tài khoản " . ($idx + 1) . ": " . $acc . "\n";
-            }
-
-            $fileContent .= "\n═══════════════════════════════════\n";
-
-            file_put_contents($tmpFile, $fileContent);
-
-            $caption = "📎 <b>File tài khoản đơn hàng #{$orderCode}</b>\n";
-            $caption .= "📦 " . ($order['product_name'] ?? '') . " × " . ($order['quantity'] ?? 1);
-
-            $fileResult = $bot->sendDocument($order['telegram_id'], $tmpFile, $caption, [
-                'parse_mode'   => 'HTML',
-                'reply_markup' => json_encode($keyboard),
-            ]);
-
-            // Xoá file tạm
-            @unlink($tmpFile);
-
-            $fileSent = !empty($fileResult);
+            require_once __DIR__ . '/../includes/telegram.php';
+            $fileKeyboard = $keyboard['inline_keyboard'];
+            $fileSent = sendAccountFileTelegram(
+                $bot,
+                $order['telegram_id'],
+                $order['id'],
+                $order['product_name'] ?? 'N/A',
+                $order['quantity'] ?? 1,
+                $allAccounts,
+                $fileKeyboard
+            );
         }
 
         $msg = 'Đã gửi thông báo đến Telegram ID: ' . $order['telegram_id'];

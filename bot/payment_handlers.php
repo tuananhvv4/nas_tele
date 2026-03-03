@@ -136,6 +136,17 @@ function handleWalletPayment($bot, $chatId, $userId, $productId, $quantity, $pdo
         $msg = DeliveryTemplate::renderWalletSuccess($orderData, $product, $accountsData, $result['new_balance']);
         
         $bot->editMessage($chatId, $messageId, $msg);
+
+        // Gửi file .txt chứa thông tin tài khoản
+        require_once __DIR__ . '/../includes/telegram.php';
+        $fileKeyboard = [
+            [
+                ['text' => '🛍️ Mua tiếp', 'callback_data' => 'show_products'],
+                ['text' => '📋 Đơn hàng', 'callback_data' => 'my_orders']
+            ]
+        ];
+        sendAccountFileTelegram($bot, $chatId, $orderId, $product['name'], $quantity, $accountsData, $fileKeyboard);
+
         error_log("Wallet payment completed successfully!");
         
     } catch (Exception $e) {

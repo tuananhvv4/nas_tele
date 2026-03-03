@@ -182,7 +182,10 @@ class TelegramNotifier {
                 'reply_markup' => json_encode($keyboard)
             ];
             $this->bot->sendMessage($chatId, $message, $options);
-            
+
+            // Gửi file .txt chứa thông tin tài khoản
+            $this->sendAccountFile($chatId, $orderData, $product, $accountsData, $keyboard);
+
             error_log("Account sent to user: Order #{$order['id']}, Telegram ID: {$chatId}");
             return true;
             
@@ -191,7 +194,56 @@ class TelegramNotifier {
             return false;
         }
     }
-    
+
+    /**
+     * Gửi file .txt chứa thông tin tài khoản cho khách
+     */
+    private function sendAccountFile($chatId, $orderData, $product, $accountsData, $keyboard = []) {
+        try {
+            $orderCode = str_pad($orderData['id'], 6, '0', STR_PAD_LEFT);
+            $tmpFile = sys_get_temp_dir() . "/order_{$orderCode}_accounts.txt";
+
+            $content  = "═══════════════════════════════════\n";
+            $content .= "  ĐƠN HÀNG #{$orderCode}\n";
+            $content .= "  Sản phẩm: " . ($product['name'] ?? 'N/A') . "\n";
+            $content .= "  Số lượng: " . ($orderData['quantity'] ?? 1) . "\n";
+            $content .= "  Ngày: " . date('d/m/Y H:i:s') . "\n";
+            $content .= "═══════════════════════════════════\n\n";
+
+            foreach ($accountsData as $idx => $acc) {
+                $line = ($idx + 1) . ". ";
+                if (is_array($acc)) {
+                    $line .= ($acc['username'] ?? '') . ' ' . ($acc['password'] ?? '');
+                    if (!empty($acc['twofa'])) {
+                        $line .= ' ' . $acc['twofa'];
+                    }
+                } else {
+                    $line .= $acc;
+                }
+                $content .= "Tài khoản " . $line . "\n";
+            }
+
+            $content .= "\n═══════════════════════════════════\n";
+
+            file_put_contents($tmpFile, $content);
+
+            $caption  = "📎 <b>File tài khoản đơn hàng #{$orderCode}</b>\n";
+            $caption .= "📦 " . ($product['name'] ?? '') . " × " . ($orderData['quantity'] ?? 1);
+
+            $options = ['parse_mode' => 'HTML'];
+            if (!empty($keyboard)) {
+                $options['reply_markup'] = json_encode(['inline_keyboard' => $keyboard]);
+            }
+
+            $this->bot->sendDocument($chatId, $tmpFile, $caption, $options);
+            @unlink($tmpFile);
+
+            error_log("Account file sent: Order #{$orderCode}, chat: {$chatId}");
+        } catch (Exception $e) {
+            error_log("Error sending account file: " . $e->getMessage());
+        }
+    }
+
     /**
      * Delete QR and payment messages after payment success
      * Note: We don't actually delete anymore, just edit the payment message
@@ -241,5 +293,64 @@ class TelegramNotifier {
             error_log("Error sending payment reminder: " . $e->getMessage());
             return false;
         }
+    }
+}
+
+/**
+ * Standalone helper: Gửi file .txt tài khoản qua Telegram
+ *
+ * @param TelegramBot $bot       Instance TelegramBot
+ * @param int|string  $chatId    Telegram chat ID
+ * @param int         $orderId   ID đơn hàng
+ * @param string      $productName Tên sản phẩm
+ * @param int         $quantity  Số lượng
+ * @param array       $accounts  Mảng accounts — mỗi phần tử là string hoặc array {username, password, twofa?}
+ * @param array       $keyboard  Inline keyboard (optional)
+ */
+function sendAccountFileTelegram($bot, $chatId, $orderId, $productName, $quantity, $accounts, $keyboard = []) {
+    try {
+        $orderCode = str_pad($orderId, 6, '0', STR_PAD_LEFT);
+        $tmpFile = sys_get_temp_dir() . "/order_{$orderCode}_accounts.txt";
+
+        $content  = "═══════════════════════════════════\n";
+        $content .= "  ĐƠN HÀNG #{$orderCode}\n";
+        $content .= "  Sản phẩm: {$productName}\n";
+        $content .= "  Số lượng: {$quantity}\n";
+        $content .= "  Ngày: " . date('d/m/Y H:i:s') . "\n";
+        $content .= "═══════════════════════════════════\n\n";
+
+        foreach ($accounts as $idx => $acc) {
+            $line = "";
+            if (is_array($acc)) {
+                $line .= ($acc['username'] ?? '') . ' ' . ($acc['password'] ?? '');
+                if (!empty($acc['twofa'])) {
+                    $line .= ' ' . $acc['twofa'];
+                }
+            } else {
+                $line .= $acc;
+            }
+            $content .= "Tài khoản " . ($idx + 1) . ": " . $line . "\n";
+        }
+
+        $content .= "\n═══════════════════════════════════\n";
+
+        file_put_contents($tmpFile, $content);
+
+        $caption  = "📎 <b>File tài khoản đơn hàng #{$orderCode}</b>\n";
+        $caption .= "📦 {$productName} × {$quantity}";
+
+        $options = ['parse_mode' => 'HTML'];
+        if (!empty($keyboard)) {
+            $options['reply_markup'] = json_encode(['inline_keyboard' => $keyboard]);
+        }
+
+        $bot->sendDocument($chatId, $tmpFile, $caption, $options);
+        @unlink($tmpFile);
+
+        error_log("Account file sent: Order #{$orderCode}, chat: {$chatId}");
+        return true;
+    } catch (Exception $e) {
+        error_log("Error sending account file: " . $e->getMessage());
+        return false;
     }
 }
