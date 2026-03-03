@@ -169,11 +169,6 @@ try {
         $accStmt->execute([$orderId]);
         $allAccounts = $accStmt->fetchAll(PDO::FETCH_COLUMN);
 
-        if (!$order) {
-            echo json_encode(['success' => false, 'message' => 'Không tìm thấy đơn hàng']);
-            exit;
-        }
-
         if (empty($order['telegram_id'])) {
             echo json_encode(['success' => false, 'message' => 'Không có Telegram ID cho đơn hàng này']);
             exit;
@@ -222,11 +217,53 @@ try {
             'reply_markup' => json_encode($keyboard),
         ]);
 
-        if ($result) {
-            echo json_encode(['success' => true, 'message' => 'Đã gửi thông báo đến Telegram ID: ' . $order['telegram_id']]);
-        } else {
+        if (!$result) {
             echo json_encode(['success' => false, 'message' => 'Không thể gửi tin nhắn Telegram']);
+            exit;
         }
+
+        // Gửi file .txt chứa thông tin tài khoản
+        $fileSent = false;
+        if (!empty($allAccounts)) {
+            $orderCode = str_pad($order['id'], 6, '0', STR_PAD_LEFT);
+            $tmpDir = sys_get_temp_dir();
+            $tmpFile = $tmpDir . "/order_{$orderCode}_accounts.txt";
+
+            // Tạo nội dung file
+            $fileContent  = "═══════════════════════════════════\n";
+            $fileContent .= "  ĐƠN HÀNG #{$orderCode}\n";
+            $fileContent .= "  Sản phẩm: " . ($order['product_name'] ?? 'N/A') . "\n";
+            $fileContent .= "  Số lượng: " . ($order['quantity'] ?? 1) . "\n";
+            $fileContent .= "  Ngày: " . date('d/m/Y H:i:s') . "\n";
+            $fileContent .= "═══════════════════════════════════\n\n";
+
+            foreach ($allAccounts as $idx => $acc) {
+                $fileContent .= "Tài khoản " . ($idx + 1) . ": " . $acc . "\n";
+            }
+
+            $fileContent .= "\n═══════════════════════════════════\n";
+
+            file_put_contents($tmpFile, $fileContent);
+
+            $caption = "📎 <b>File tài khoản đơn hàng #{$orderCode}</b>\n";
+            $caption .= "📦 " . ($order['product_name'] ?? '') . " × " . ($order['quantity'] ?? 1);
+
+            $fileResult = $bot->sendDocument($order['telegram_id'], $tmpFile, $caption, [
+                'parse_mode'   => 'HTML',
+                'reply_markup' => json_encode($keyboard),
+            ]);
+
+            // Xoá file tạm
+            @unlink($tmpFile);
+
+            $fileSent = !empty($fileResult);
+        }
+
+        $msg = 'Đã gửi thông báo đến Telegram ID: ' . $order['telegram_id'];
+        if ($fileSent) {
+            $msg .= ' (kèm file .txt)';
+        }
+        echo json_encode(['success' => true, 'message' => $msg]);
         exit;
     }
 

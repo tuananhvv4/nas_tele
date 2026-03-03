@@ -131,6 +131,73 @@ class TelegramBot {
     }
 
     /**
+     * Send document (file) to user
+     * @param int    $chatId   Chat ID
+     * @param string $filePath Đường dẫn file trên server
+     * @param string $caption  Caption cho file (hỗ trợ HTML)
+     * @param array  $options  Tuỳ chọn thêm (reply_markup, parse_mode...)
+     * @return array|null
+     */
+    public function sendDocument($chatId, $filePath, $caption = '', $options = []) {
+        $data = [
+            'chat_id' => $chatId,
+            'document' => new \CURLFile($filePath),
+        ];
+
+        if ($caption) {
+            $data['caption'] = $caption;
+            $data['parse_mode'] = $options['parse_mode'] ?? 'HTML';
+        }
+
+        if (isset($options['reply_markup'])) {
+            $data['reply_markup'] = $options['reply_markup'];
+        }
+
+        return $this->apiRequestMultipart('sendDocument', $data);
+    }
+
+    /**
+     * API request dạng multipart/form-data (dùng cho upload file)
+     */
+    private function apiRequestMultipart($method, $data) {
+        $url = $this->apiUrl . $method;
+
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => $url,
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $data, // CURLFile cần truyền array, không encode
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_SSL_VERIFYPEER => false,
+            // Không set Content-Type header → cURL tự dùng multipart/form-data
+        ]);
+
+        $result = curl_exec($ch);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($result === false || $curlError) {
+            error_log("ERROR: TelegramBot cURL multipart failed [{$method}]: " . $curlError);
+            return null;
+        }
+
+        $decoded = json_decode($result, true);
+
+        if (!$decoded) {
+            error_log("ERROR: TelegramBot failed to decode JSON [{$method}]");
+            return null;
+        }
+
+        if (!isset($decoded['ok']) || !$decoded['ok']) {
+            error_log("ERROR: Telegram API error [{$method}]: " . ($decoded['description'] ?? 'Unknown error'));
+        }
+
+        return $decoded;
+    }
+
+    /**
      * Make API request using cURL with timeout
      */
     private function apiRequest($method, $data) {

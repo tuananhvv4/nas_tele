@@ -142,7 +142,7 @@
         <div class="col-md-4">
             <div class="stat-card">
                 <div class="stat-icon">💰</div>
-                <div class="stat-value">$<?= number_format($stats['total_revenue'], 2) ?></div>
+                <div class="stat-value"><?= number_format($stats['total_revenue']) ?> VNĐ</div>
                 <div class="stat-label">Doanh Thu</div>
             </div>
         </div>
