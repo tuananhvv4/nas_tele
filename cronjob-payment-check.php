@@ -53,9 +53,10 @@ while ((time() - $startTime) < 55) {
             
             foreach ($pendingOrders as $order) {
                 try {
-                    // Check payment
-                    $result = $sepay->checkPayment($order['transaction_code'], $order['total_price']);
-                    
+                    // Check payment - use qr_amount for mixed payments, total_price for QR-only
+                    $checkAmount = floatval($order['qr_amount'] ?? $order['total_price']);
+                    $result = $sepay->checkPayment($order['transaction_code'], $checkAmount);
+
                     if ($result['success'] && $result['verified']) {
                         logMessage("✅ Payment verified for Order #{$order['id']}");
                         
