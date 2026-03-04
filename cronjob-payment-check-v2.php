@@ -5,8 +5,8 @@
  * Perfect for cronjob that runs every minute
  */
 
-set_time_limit(70); // 70 seconds max
-ini_set('max_execution_time', 70);
+set_time_limit(50); // 50 seconds max
+ini_set('max_execution_time', 50);
 
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/sepay.php';
@@ -102,8 +102,8 @@ $startTime = time();
 $checkCount = 0;
 $paymentsProcessed = 0;
 
-// Run for 55 seconds (leave 5s buffer for next cronjob)
-while ((time() - $startTime) < 55) {
+// Run for 30 seconds
+while ((time() - $startTime) < 35) {
     try {
         $checkCount++;
         
@@ -203,8 +203,8 @@ while ((time() - $startTime) < 55) {
             logMessage("Check #{$checkCount}: No pending orders");
         }
         
-        // Sleep for 3 seconds before next check
-        sleep(3);
+        // Sleep for 5 seconds before next check
+        sleep(5);
         
     } catch (Exception $e) {
         logMessage("❌ Error: " . $e->getMessage());
