@@ -65,6 +65,7 @@ function logMessage($message) {
         // kiểm tra xem transaction_code có nằm trong description không
         // và số tiền chuyển khoản khớp với số tiền cần thanh toán qua QR
         if (stripos($description, $transactionCode) !== false && abs($expectedAmount - $transAmount) < 1) {
+            logMessage("Payment success: Found matching transaction for Order #{$order['id']} with amount {$transAmount} VND");
             return true;
         }
     }
