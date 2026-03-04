@@ -42,35 +42,58 @@ function logMessage($message) {
  * return bool
  */
 
- function checkPayment($order, $acbTransactions) {
-    if (empty($order['transaction_code']) || !is_array($acbTransactions)) {
+// function checkPayment($order, $acbTransactions) {
+//    if (empty($order['transaction_code']) || !is_array($acbTransactions)) {
+//        return false;
+//    }
+//
+//    $transactionCode = trim((string)$order['transaction_code']);
+//
+//    // Xác định số tiền cần kiểm tra:
+//    // - Mixed payment: khách chỉ chuyển khoản phần qr_amount (phần còn lại sau khi trừ ví)
+//    // - QR payment: khách chuyển khoản toàn bộ total_price (qr_amount == total_price)
+//    $expectedAmount = floatval($order['qr_amount'] ?? $order['total_price']);
+//
+//    foreach ($acbTransactions as $trans) {
+//        if (empty($trans['description'])) {
+//            continue;
+//        }
+//
+//        $description = (string)$trans['description'];
+//        $transAmount = floatval($trans['amount'] ?? 0);
+//
+//        // kiểm tra xem transaction_code có nằm trong description không
+//        // và số tiền chuyển khoản khớp với số tiền cần thanh toán qua QR
+//        if (stripos($description, $transactionCode) !== false && abs($expectedAmount - $transAmount) < 1) {
+//            return true;
+//        }
+//    }
+//
+//    return false;
+//}
+
+    function checkPayment($order, $acbTransactions) {
+        if (empty($order['transaction_code']) || !is_array($acbTransactions)) {
+            return false;
+        }
+
+        $transactionCode = trim((string)$order['transaction_code']);
+
+        foreach ($acbTransactions as $trans) {
+            if (empty($trans['description'])) {
+                continue;
+            }
+
+            $description = (string)$trans['description'];
+
+            // kiểm tra xem transaction_code có nằm trong description không, nếu có => true
+            if (stripos($description, $transactionCode) !== false) {
+                return true;
+            }
+        }
+
         return false;
     }
-
-    $transactionCode = trim((string)$order['transaction_code']);
-
-    // Xác định số tiền cần kiểm tra:
-    // - Mixed payment: khách chỉ chuyển khoản phần qr_amount (phần còn lại sau khi trừ ví)
-    // - QR payment: khách chuyển khoản toàn bộ total_price (qr_amount == total_price)
-    $expectedAmount = floatval($order['qr_amount'] ?? $order['total_price']);
-
-    foreach ($acbTransactions as $trans) {
-        if (empty($trans['description'])) {
-            continue;
-        }
-
-        $description = (string)$trans['description'];
-        $transAmount = floatval($trans['amount'] ?? 0);
-
-        // kiểm tra xem transaction_code có nằm trong description không
-        // và số tiền chuyển khoản khớp với số tiền cần thanh toán qua QR
-        if (stripos($description, $transactionCode) !== false && abs($expectedAmount - $transAmount) < 1) {
-            return true;
-        }
-    }
-
-    return false;
-}
 
 logMessage("🚀 Cronjob started - Will check for 55 seconds");
 
