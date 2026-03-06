@@ -147,7 +147,7 @@ class ProductTemplate {
         
         // Refresh + back buttons
         $keyboard[] = [
-            ['text' => '🔄 Cập nhật sản phẩm', 'callback_data' => 'show_products']
+            ['text' => '🔄 Cập nhật sản phẩm', 'callback_data' => 'refresh_products']
         ];
         $keyboard[] = [
             ['text' => '🏠 Trang chủ', 'callback_data' => 'start']

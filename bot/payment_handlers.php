@@ -6,60 +6,67 @@
 
 /**
  * Handle Wallet Payment
+ *
+ * Toàn bộ luồng (kiểm tra số dư → trừ ví → tạo đơn → gán account) nằm trong
+ * MỘT transaction duy nhất với SELECT ... FOR UPDATE để tránh race condition
+ * khi Telegram retry webhook hoặc user double-click.
  */
 function handleWalletPayment($bot, $chatId, $userId, $productId, $quantity, $pdo, $messageId) {
+    // Ngay lập tức xoá keyboard và hiện "đang xử lý" để chặn double-click.
+    // Nếu message đã bị chỉnh (duplicate callback), Telegram trả lỗi → thoát sớm.
     try {
-        
-        // Get product and user
+        $bot->editMessage($chatId, $messageId, "⏳ <b>Đang xử lý thanh toán...</b>\n\nVui lòng chờ trong giây lát.", []);
+    } catch (Exception $e) {
+        // "message is not modified" hoặc lỗi khác → callback trùng, bỏ qua
+        error_log("Wallet payment: duplicate callback ignored for message $messageId");
+        return;
+    }
+
+    try {
+        $pdo->beginTransaction();
+
+        // Lock user row: chặn concurrent transaction đọc balance cũ
+        $stmt = $pdo->prepare("SELECT id, username, wallet_balance FROM users WHERE telegram_id = ? FOR UPDATE");
+        $stmt->execute([$userId]);
+        $user = $stmt->fetch();
+
         $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ?");
         $stmt->execute([$productId]);
         $product = $stmt->fetch();
-        
-        $stmt = $pdo->prepare("SELECT id, wallet_balance FROM users WHERE telegram_id = ?");
-        $stmt->execute([$userId]);
-        $user = $stmt->fetch();
-        
+
         if (!$product || !$user) {
             throw new Exception("Không tìm thấy sản phẩm hoặc user!");
         }
-        
-        $totalPrice = $product['price'] * $quantity;
+
+        $totalPrice    = $product['price'] * $quantity;
         $walletBalance = floatval($user['wallet_balance']);
-        
-        // Check sufficient balance
+
         if ($walletBalance < $totalPrice) {
             throw new Exception("Số dư ví không đủ! Cần " . formatVND($totalPrice) . ", có " . formatVND($walletBalance));
         }
-        
-        // Check stock
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM product_accounts WHERE product_id = ? AND is_sold = 0");
+
+        // Lock + đếm stock để tránh oversell
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM product_accounts WHERE product_id = ? AND is_sold = 0 FOR UPDATE");
         $stmt->execute([$productId]);
         $availableStock = $stmt->fetchColumn();
-        
+
         if ($availableStock < $quantity) {
             throw new Exception("Không đủ hàng trong kho!");
         }
-        
-        // Deduct from wallet (it handles its own transaction)
-        $result = deductFromWallet(
-            $user['id'],
-            $userId,
-            $totalPrice,
-            'purchase',
-            "Mua {$quantity}x {$product['name']}",
-            null,
-            $pdo
-        );
-        
-        if (!$result['success']) {
-            throw new Exception($result['message']);
-        }
-        
-        // Start transaction for order creation
-        $pdo->beginTransaction();
-        
-        // Create order
+
+        // Trừ ví (inline trong cùng transaction, không gọi deductFromWallet riêng)
+        $newBalance = $walletBalance - $totalPrice;
+        $pdo->prepare("UPDATE users SET wallet_balance = ? WHERE id = ?")->execute([$newBalance, $user['id']]);
+
         $transactionCode = generateTransactionCode($pdo);
+
+        $pdo->prepare("
+            INSERT INTO wallet_transactions
+                (user_id, telegram_id, type, amount, balance_before, balance_after, description, reference_id)
+            VALUES (?, ?, 'purchase', ?, ?, ?, ?, NULL)
+        ")->execute([$user['id'], $userId, -$totalPrice, $walletBalance, $newBalance, "Mua {$quantity}x {$product['name']}"]);
+
+        // Tạo đơn hàng
         $stmt = $pdo->prepare("
             INSERT INTO orders (
                 user_id, telegram_id, product_id, quantity, price, total_price,
@@ -68,92 +75,80 @@ function handleWalletPayment($bot, $chatId, $userId, $productId, $quantity, $pdo
             ) VALUES (?, ?, ?, ?, ?, ?, 'wallet', ?, 0, ?, 'completed')
         ");
         $stmt->execute([
-            $user['id'],
-            $userId,
-            $productId,
-            $quantity,
-            $product['price'],
-            $totalPrice,
-            $totalPrice,
-            $transactionCode
+            $user['id'], $userId, $productId, $quantity,
+            $product['price'], $totalPrice, $totalPrice, $transactionCode,
         ]);
-        
         $orderId = $pdo->lastInsertId();
-        
-        // Assign accounts
+
+        // Gán account với lock để không bị gán trùng
         $stmt = $pdo->prepare("
-            SELECT id, account_data FROM product_accounts 
-            WHERE product_id = ? AND is_sold = 0 
-            LIMIT ?
+            SELECT id, account_data FROM product_accounts
+            WHERE product_id = ? AND is_sold = 0
+            LIMIT ? FOR UPDATE
         ");
         $stmt->execute([$productId, $quantity]);
         $accounts = $stmt->fetchAll();
-        
-        foreach ($accounts as $account) {
-            $updateStmt = $pdo->prepare("
-                UPDATE product_accounts 
-                SET is_sold = 1, sold_to_user_id = ?, order_id = ?, sold_at = NOW() 
-                WHERE id = ?
-            ");
-            $updateStmt->execute([$user['id'], $orderId, $account['id']]);
+
+        if (count($accounts) < $quantity) {
+            throw new Exception("Không đủ hàng trong kho (kiểm tra lại)!");
         }
 
-        // Lưu tất cả account IDs vào order (chuỗi: "5,12,18")
+        foreach ($accounts as $account) {
+            $pdo->prepare("
+                UPDATE product_accounts
+                SET is_sold = 1, sold_to_user_id = ?, order_id = ?, sold_at = NOW()
+                WHERE id = ?
+            ")->execute([$user['id'], $orderId, $account['id']]);
+        }
+
         $accountIdsStr = implode(',', array_column($accounts, 'id'));
         $pdo->prepare("UPDATE orders SET account_id = ? WHERE id = ?")->execute([$accountIdsStr, $orderId]);
 
         $pdo->commit();
-        
-        // Prepare account data for template
+
+        // ── Gửi tin nhắn cho user ──────────────────────────────────────────────
         $accountsData = [];
         foreach ($accounts as $account) {
-            $parts = preg_split('/\s+/', $account['account_data']);
-            
+            $parts       = preg_split('/\s+/', $account['account_data']);
             $accountData = [
                 'username' => trim($parts[0] ?? ''),
-                'password' => trim($parts[1] ?? '')
+                'password' => trim($parts[1] ?? ''),
             ];
-            
-            // Add 2FA if exists
-            if (isset($parts[2]) && !empty(trim($parts[2]))) {
+            if (!empty(trim($parts[2] ?? ''))) {
                 $accountData['twofa'] = trim($parts[2]);
             }
-            
             $accountsData[] = $accountData;
         }
-        
-        // Get order data for template
+
         $orderData = [
-            'id' => $orderId,
-            'quantity' => $quantity,
-            'total_price' => $totalPrice,
+            'id'               => $orderId,
+            'quantity'         => $quantity,
+            'total_price'      => $totalPrice,
             'transaction_code' => $transactionCode,
-            'created_at' => date('Y-m-d H:i:s')
+            'created_at'       => date('Y-m-d H:i:s'),
         ];
-        
-        // Use DeliveryTemplate to format message
+
         require_once __DIR__ . '/templates/DeliveryTemplate.php';
-        $msg = DeliveryTemplate::renderWalletSuccess($orderData, $product, $accountsData, $result['new_balance']);
-        
+        $msg = DeliveryTemplate::renderWalletSuccess($orderData, $product, $accountsData, $newBalance);
+
         $bot->editMessage($chatId, $messageId, $msg);
 
-        // Gửi file .txt chứa thông tin tài khoản
         require_once __DIR__ . '/../includes/telegram.php';
         sendAccountFileTelegram($bot, $chatId, $orderId, $product['name'], $quantity, $accountsData);
 
-        error_log("Wallet payment completed successfully!");
+        error_log("Wallet payment completed: Order #$orderId, User $userId");
 
-        // Gửi thông báo qua telegram cho admin
-        $msg = "User: " . $user['username'] . "\n";
-        $msg .= "Đã mua: " . $product['name'] . "\n";
-        $msg .= "Số lượng: " . $quantity . "\n";
-        $msg .= "Tổng tiền: " . formatVND($totalPrice) . "\n";
-        $msg .= "Mã đơn: " . $orderId . "\n";
-        $msg .= "Thời gian: " . date('Y-m-d H:i:s') . "\n";
+        // ── Thông báo admin ────────────────────────────────────────────────────
+        $adminMsg  = "✅ Đơn hàng mới\n";
+        $adminMsg .= "User: "      . ($user['username'] ?? 'Unknown') . "\n";
+        $adminMsg .= "Đã mua: "    . $product['name'] . "\n";
+        $adminMsg .= "Số lượng: "  . $quantity . "\n";
+        $adminMsg .= "Tổng tiền: " . formatVND($totalPrice) . "\n";
+        $adminMsg .= "Mã đơn: "   . $orderId . "\n";
+        $adminMsg .= "Thời gian: " . date('Y-m-d H:i:s') . "\n";
 
-        sendMessTelegram($msg);
+        sendMessTelegram($adminMsg);
 
-        
     } catch (Exception $e) {
         if ($pdo->inTransaction()) {
             $pdo->rollBack();

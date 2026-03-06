@@ -164,12 +164,17 @@ if (isset($update['callback_query'])) {
     $messageId = $callbackQuery['message']['message_id'];
     $data = $callbackQuery['data'];
     $userId = $callbackQuery['from']['id'];
+    $callbackAnswered = false;
 
     // Route callbacks
     if ($data === 'start') {
         handleStartCommand($bot, $chatId, $pdo, $messageId);
     } elseif ($data === 'show_products') {
         handleProductsCommand($bot, $chatId, $pdo, $messageId);
+    } elseif ($data === 'refresh_products') {
+        handleProductsCommand($bot, $chatId, $pdo, $messageId);
+        $bot->answerCallbackQuery($callbackQuery['id'], '✅ Đã cập nhật danh sách sản phẩm!');
+        $callbackAnswered = true;
     } elseif (strpos($data, 'products_page_') === 0) {
         $page = intval(str_replace('products_page_', '', $data));
         handleProductsCommand($bot, $chatId, $pdo, $messageId, $page);
@@ -247,8 +252,10 @@ if (isset($update['callback_query'])) {
         handleSupport($bot, $chatId, $pdo, $messageId);
     }
 
-    // Answer callback query
-    $bot->answerCallbackQuery($callbackQuery['id']);
+    // Answer callback query (nếu chưa được answer thủ công ở trên)
+    if (!$callbackAnswered) {
+        $bot->answerCallbackQuery($callbackQuery['id']);
+    }
 }
 
     // Success response
