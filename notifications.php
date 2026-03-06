@@ -1,3 +1,289 @@
+<?php
+require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/auth.php';
+requireLogin();
+
+const NOTIF_BATCH_SIZE = 25; // Safe under Telegram's 30 msg/sec limit
+
+// ── Table setup ────────────────────────────────────────────────────────────
+try {
+    $tableExists = $pdo->query("SHOW TABLES LIKE 'notifications'")->fetch();
+    if ($tableExists) {
+        $hasMessage = $pdo->query("SHOW COLUMNS FROM notifications LIKE 'message'")->fetch();
+        if (!$hasMessage) {
+            $pdo->exec("DROP TABLE notifications");
+            $tableExists = false;
+        }
+    }
+
+    $pdo->exec("CREATE TABLE IF NOT EXISTS notifications (
+        id           INT AUTO_INCREMENT PRIMARY KEY,
+        title        VARCHAR(255) NOT NULL,
+        message      TEXT NOT NULL,
+        image_url    VARCHAR(500) NULL,
+        type         VARCHAR(50)  DEFAULT 'announcement',
+        status       VARCHAR(50)  DEFAULT 'draft',
+        total_users  INT          DEFAULT 0,
+        sent_count   INT          DEFAULT 0,
+        failed_count INT          DEFAULT 0,
+        created_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+        sent_at      TIMESTAMP    NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    // Migrate: add columns that may be missing in older installs
+    if ($tableExists) {
+        $migrations = [
+            'image_url'    => 'VARCHAR(500) NULL',
+            'total_users'  => 'INT DEFAULT 0',
+            'failed_count' => 'INT DEFAULT 0',
+        ];
+        foreach ($migrations as $col => $def) {
+            if (!$pdo->query("SHOW COLUMNS FROM notifications LIKE '$col'")->fetch()) {
+                $pdo->exec("ALTER TABLE notifications ADD COLUMN $col $def");
+            }
+        }
+    }
+} catch (PDOException $e) { /* continue */ }
+
+// ── Batch-send endpoint — called by JS, returns JSON ──────────────────────
+if (isset($_GET['send_batch'])) {
+    header('Content-Type: application/json');
+
+    $notifId = intval($_GET['id']     ?? 0);
+    $offset  = intval($_GET['offset'] ?? 0);
+
+    try {
+        $notifStmt = $pdo->prepare("SELECT * FROM notifications WHERE id = ?");
+        $notifStmt->execute([$notifId]);
+        $notification = $notifStmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$notification) {
+            echo json_encode(['error' => 'Không tìm thấy thông báo']);
+            exit;
+        }
+
+        $botConfig = $pdo->query("SELECT * FROM bots WHERE id = 1")->fetch();
+        if (!$botConfig || !$botConfig['is_configured']) {
+            echo json_encode(['error' => 'Bot chưa được cấu hình']);
+            exit;
+        }
+        $botToken = $botConfig['bot_token'];
+
+        // First batch: record total and mark as sending
+        $totalUsers = intval($notification['total_users']);
+        if ($offset === 0) {
+            $totalUsers = intval($pdo->query(
+                "SELECT COUNT(DISTINCT telegram_id) FROM users WHERE telegram_id IS NOT NULL AND telegram_id != ''"
+            )->fetchColumn());
+            $pdo->prepare("UPDATE notifications SET status = 'sending', total_users = ? WHERE id = ?")
+                ->execute([$totalUsers, $notifId]);
+        }
+
+        // Fetch this batch (avoid fetchAll for large datasets)
+        $stmt = $pdo->prepare("
+            SELECT DISTINCT telegram_id FROM users
+            WHERE telegram_id IS NOT NULL AND telegram_id != ''
+            LIMIT ? OFFSET ?
+        ");
+        $stmt->execute([NOTIF_BATCH_SIZE, $offset]);
+        $users = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        // Build Telegram message
+        $typeEmoji = ['announcement' => '📢', 'promotion' => '🎉', 'update' => '🔔', 'alert' => '⚠️'];
+        $emoji     = $typeEmoji[$notification['type']] ?? '📢';
+        $msgText   = "{$emoji} *{$notification['title']}*\n\n{$notification['message']}";
+        $imgUrl    = !empty($notification['image_url'])
+            ? 'https://mrmista.online/' . $notification['image_url']
+            : null;
+
+        // Send batch in parallel using cURL multi-handle
+        $batchStart  = microtime(true);
+        $sentCount   = 0;
+        $failedCount = 0;
+        $mh          = curl_multi_init();
+        $handles     = [];
+
+        foreach ($users as $chatId) {
+            if ($imgUrl) {
+                $url  = "https://api.telegram.org/bot{$botToken}/sendPhoto";
+                $data = ['chat_id' => $chatId, 'photo' => $imgUrl, 'caption' => $msgText, 'parse_mode' => 'Markdown'];
+            } else {
+                $url  = "https://api.telegram.org/bot{$botToken}/sendMessage";
+                $data = ['chat_id' => $chatId, 'text'  => $msgText, 'parse_mode' => 'Markdown'];
+            }
+
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_POST           => 1,
+                CURLOPT_POSTFIELDS     => http_build_query($data),
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_TIMEOUT        => 10,
+            ]);
+            $handles[(int)$ch] = $ch;
+            curl_multi_add_handle($mh, $ch);
+        }
+
+        // Execute all handles in parallel
+        do {
+            $status = curl_multi_exec($mh, $active);
+            if ($active) curl_multi_select($mh);
+        } while ($active && $status == CURLM_OK);
+
+        // Collect results
+        foreach ($handles as $ch) {
+            $response = json_decode(curl_multi_getcontent($ch), true);
+            if ($response && ($response['ok'] ?? false)) {
+                $sentCount++;
+            } else {
+                $failedCount++;
+            }
+            curl_multi_remove_handle($mh, $ch);
+            curl_close($ch);
+        }
+        curl_multi_close($mh);
+
+        // Rate limit guard: ensure we stay under 30 msg/sec
+        $elapsed = microtime(true) - $batchStart;
+        if ($elapsed < 1.0 && !empty($users)) {
+            usleep((int)((1.0 - $elapsed) * 1_000_000));
+        }
+
+        // Persist counts
+        $pdo->prepare("
+            UPDATE notifications SET sent_count = sent_count + ?, failed_count = failed_count + ? WHERE id = ?
+        ")->execute([$sentCount, $failedCount, $notifId]);
+
+        $done = count($users) < NOTIF_BATCH_SIZE;
+        if ($done) {
+            $pdo->prepare("UPDATE notifications SET status = 'sent', sent_at = NOW() WHERE id = ?")
+                ->execute([$notifId]);
+        }
+
+        // Return updated totals
+        $totals = $pdo->prepare("SELECT sent_count, failed_count FROM notifications WHERE id = ?");
+        $totals->execute([$notifId]);
+        $t = $totals->fetch(PDO::FETCH_ASSOC);
+
+        echo json_encode([
+            'done'         => $done,
+            'next_offset'  => $offset + NOTIF_BATCH_SIZE,
+            'batch_sent'   => $sentCount,
+            'batch_failed' => $failedCount,
+            'total_sent'   => intval($t['sent_count']),
+            'total_failed' => intval($t['failed_count']),
+            'total_users'  => $totalUsers,
+        ]);
+
+    } catch (Exception $e) {
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// ── POST handlers ──────────────────────────────────────────────────────────
+$isAjax  = strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'xmlhttprequest';
+$success = '';
+$error   = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    $action = $_POST['action'];
+
+    if ($action === 'send_broadcast') {
+        $title   = trim($_POST['title']   ?? '');
+        $message = trim($_POST['message'] ?? '');
+        $type    = $_POST['type']         ?? 'announcement';
+
+        if ($title && $message) {
+            try {
+                // Image upload
+                $imageUrl = null;
+                if (isset($_FILES['notification_image']) && $_FILES['notification_image']['error'] === UPLOAD_ERR_OK) {
+                    $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+                    if (
+                        in_array($_FILES['notification_image']['type'], $allowedTypes)
+                        && $_FILES['notification_image']['size'] <= 5 * 1024 * 1024
+                    ) {
+                        $uploadDir = __DIR__ . '/uploads/notifications/';
+                        if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+                        $ext      = pathinfo($_FILES['notification_image']['name'], PATHINFO_EXTENSION);
+                        $fileName = 'notif_' . time() . '_' . uniqid() . '.' . $ext;
+                        if (move_uploaded_file($_FILES['notification_image']['tmp_name'], $uploadDir . $fileName)) {
+                            $imageUrl = 'uploads/notifications/' . $fileName;
+                        }
+                    }
+                }
+
+                $botConfig = $pdo->query("SELECT * FROM bots WHERE id = 1")->fetch();
+                if (!$botConfig || !$botConfig['is_configured']) {
+                    throw new Exception('Bot chưa được cấu hình!');
+                }
+
+                $totalUsers = intval($pdo->query(
+                    "SELECT COUNT(DISTINCT telegram_id) FROM users WHERE telegram_id IS NOT NULL AND telegram_id != ''"
+                )->fetchColumn());
+
+                // Save as 'queued' — JS will handle actual sending via batch endpoint
+                $stmt = $pdo->prepare("
+                    INSERT INTO notifications (title, message, image_url, type, status, total_users)
+                    VALUES (?, ?, ?, ?, 'queued', ?)
+                ");
+                $stmt->execute([$title, $message, $imageUrl, $type, $totalUsers]);
+                $notifId = $pdo->lastInsertId();
+
+                if ($isAjax) {
+                    header('Content-Type: application/json');
+                    echo json_encode(['success' => true, 'id' => (int)$notifId, 'total' => $totalUsers]);
+                    exit;
+                }
+                $success = "Thông báo đã được tạo (ID: #{$notifId})";
+
+            } catch (Exception $e) {
+                if ($isAjax) {
+                    header('Content-Type: application/json');
+                    echo json_encode(['error' => $e->getMessage()]);
+                    exit;
+                }
+                $error = 'Lỗi: ' . $e->getMessage();
+            }
+        } else {
+            if ($isAjax) {
+                header('Content-Type: application/json');
+                echo json_encode(['error' => 'Vui lòng điền đầy đủ thông tin!']);
+                exit;
+            }
+            $error = 'Vui lòng điền đầy đủ thông tin!';
+        }
+
+    } elseif ($action === 'delete') {
+        $id = intval($_POST['id'] ?? 0);
+        if ($id) {
+            $pdo->prepare("DELETE FROM notifications WHERE id = ?")->execute([$id]);
+            $success = 'Đã xóa thông báo!';
+        }
+    }
+}
+
+// ── Stats ──────────────────────────────────────────────────────────────────
+try {
+    $totalUsers = $pdo->query(
+        "SELECT COUNT(DISTINCT telegram_id) FROM users WHERE telegram_id IS NOT NULL AND telegram_id != ''"
+    )->fetchColumn();
+} catch (Exception $e) { $totalUsers = 0; }
+
+try {
+    $totalNotifications = $pdo->query("SELECT COUNT(*) FROM notifications WHERE status = 'sent'")->fetchColumn();
+    $totalSent          = $pdo->query("SELECT COALESCE(SUM(sent_count), 0) FROM notifications")->fetchColumn();
+    $notifications      = $pdo->query("SELECT * FROM notifications ORDER BY created_at DESC LIMIT 20")->fetchAll();
+} catch (Exception $e) {
+    $totalNotifications = 0;
+    $totalSent          = 0;
+    $notifications      = [];
+}
+
+$pageTitle = 'Notifications';
+include __DIR__ . '/includes/header.php';
+?>
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -8,212 +294,20 @@
     <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body>
-    <?php
-    require_once __DIR__ . '/config/db.php';
-    require_once __DIR__ . '/includes/auth.php';
-    requireLogin();
-
-    $success = '';
-    $error = '';
-
-    // Create notifications table (drop old one if incompatible)
-    try {
-        // Check if table exists and has correct structure
-        $tableExists = $pdo->query("SHOW TABLES LIKE 'notifications'")->fetch();
-        
-        if ($tableExists) {
-            // Check if message column exists
-            $hasMessage = $pdo->query("SHOW COLUMNS FROM notifications LIKE 'message'")->fetch();
-            if (!$hasMessage) {
-                // Old incompatible table, drop it
-                $pdo->exec("DROP TABLE notifications");
-            }
-        }
-        
-        // Create table with correct structure
-        $pdo->exec("CREATE TABLE IF NOT EXISTS notifications (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            title VARCHAR(255) NOT NULL,
-            message TEXT NOT NULL,
-            type VARCHAR(50) DEFAULT 'announcement',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            sent_at TIMESTAMP NULL,
-            sent_count INT DEFAULT 0,
-            status VARCHAR(50) DEFAULT 'draft'
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-        
-    } catch (PDOException $e) {
-        // Continue anyway
-    }
-
-    // Handle broadcast
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-        $action = $_POST['action'];
-        
-        if ($action === 'send_broadcast') {
-            $title = trim($_POST['title'] ?? '');
-            $message = trim($_POST['message'] ?? '');
-            $type = $_POST['type'] ?? 'announcement';
-            
-            if ($title && $message) {
-                try {
-                    // Handle image upload
-                    $imageUrl = null;
-                    if (isset($_FILES['notification_image']) && $_FILES['notification_image']['error'] === UPLOAD_ERR_OK) {
-                        $uploadDir = __DIR__ . '/uploads/notifications/';
-                        if (!is_dir($uploadDir)) {
-                            mkdir($uploadDir, 0755, true);
-                        }
-                        
-                        $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-                        $fileType = $_FILES['notification_image']['type'];
-                        $fileSize = $_FILES['notification_image']['size'];
-                        
-                        if (in_array($fileType, $allowedTypes) && $fileSize <= 5 * 1024 * 1024) { // Max 5MB
-                            $fileExt = pathinfo($_FILES['notification_image']['name'], PATHINFO_EXTENSION);
-                            $fileName = 'notif_' . time() . '_' . uniqid() . '.' . $fileExt;
-                            $filePath = $uploadDir . $fileName;
-                            
-                            if (move_uploaded_file($_FILES['notification_image']['tmp_name'], $filePath)) {
-                                $imageUrl = 'uploads/notifications/' . $fileName;
-                            }
-                        }
-                    }
-                    
-                    // Save notification
-                    $stmt = $pdo->prepare("INSERT INTO notifications (title, message, image_url, type, status) VALUES (?, ?, ?, ?, 'draft')");
-                    $stmt->execute([$title, $message, $imageUrl, $type]);
-                    $notificationId = $pdo->lastInsertId();
-                    
-                    // Get bot config
-                    $botConfig = $pdo->query("SELECT * FROM bots WHERE id = 1")->fetch();
-                    
-                    if ($botConfig && $botConfig['is_configured']) {
-                        $botToken = $botConfig['bot_token'];
-                        
-                        // Get all users with telegram_id
-                        $stmt = $pdo->query("SELECT DISTINCT telegram_id FROM users WHERE telegram_id IS NOT NULL AND telegram_id != ''");
-                        $users = $stmt->fetchAll();
-                        
-                        $sentCount = 0;
-                        $failedCount = 0;
-                        
-                        // Format message
-                        $emoji = [
-                            'announcement' => '📢',
-                            'promotion' => '🎉',
-                            'update' => '🔔',
-                            'alert' => '⚠️'
-                        ];
-                        
-                        $formattedMessage = ($emoji[$type] ?? '📢') . " *{$title}*\n\n{$message}";
-                        
-                        // Get full image URL if exists
-                        $fullImageUrl = null;
-                        if ($imageUrl) {
-                            $fullImageUrl = 'https://mrmista.online/' . $imageUrl;
-                        }
-                        
-                        foreach ($users as $user) {
-                            try {
-                                $chatId = $user['telegram_id'];
-                                
-                                if ($fullImageUrl) {
-                                    // Send with image using sendPhoto
-                                    $url = "https://api.telegram.org/bot{$botToken}/sendPhoto";
-                                    $data = [
-                                        'chat_id' => $chatId,
-                                        'photo' => $fullImageUrl,
-                                        'caption' => $formattedMessage,
-                                        'parse_mode' => 'Markdown'
-                                    ];
-                                } else {
-                                    // Send text-only using sendMessage
-                                    $url = "https://api.telegram.org/bot{$botToken}/sendMessage";
-                                    $data = [
-                                        'chat_id' => $chatId,
-                                        'text' => $formattedMessage,
-                                        'parse_mode' => 'Markdown'
-                                    ];
-                                }
-                                
-                                $ch = curl_init($url);
-                                curl_setopt($ch, CURLOPT_POST, 1);
-                                curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
-                                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-                                $result = curl_exec($ch);
-                                curl_close($ch);
-                                
-                                $response = json_decode($result, true);
-                                if ($response && isset($response['ok']) && $response['ok']) {
-                                    $sentCount++;
-                                } else {
-                                    $failedCount++;
-                                }
-                                
-                                usleep(50000); // 50ms delay
-                            } catch (Exception $e) {
-                                $failedCount++;
-                            }
-                        }
-                        
-                        // Update notification
-                        $stmt = $pdo->prepare("UPDATE notifications SET sent_at = NOW(), sent_count = ?, status = 'sent' WHERE id = ?");
-                        $stmt->execute([$sentCount, $notificationId]);
-                        
-                        $success = "Đã gửi thành công đến {$sentCount} người dùng!" . ($failedCount > 0 ? " ({$failedCount} thất bại)" : "");
-                    } else {
-                        $error = 'Bot chưa được cấu hình!';
-                    }
-                } catch (Exception $e) {
-                    $error = 'Lỗi: ' . $e->getMessage();
-                }
-            } else {
-                $error = 'Vui lòng điền đầy đủ thông tin!';
-            }
-        } elseif ($action === 'delete') {
-            $id = intval($_POST['id'] ?? 0);
-            if ($id) {
-                $pdo->prepare("DELETE FROM notifications WHERE id = ?")->execute([$id]);
-                $success = 'Đã xóa thông báo!';
-            }
-        }
-    }
-
-    // Get stats
-    try {
-        $totalUsers = $pdo->query("SELECT COUNT(DISTINCT telegram_id) FROM users WHERE telegram_id IS NOT NULL AND telegram_id != ''")->fetchColumn();
-    } catch (Exception $e) {
-        $totalUsers = 0;
-    }
-    
-    try {
-        $totalNotifications = $pdo->query("SELECT COUNT(*) FROM notifications WHERE status = 'sent'")->fetchColumn();
-        $totalSent = $pdo->query("SELECT COALESCE(SUM(sent_count), 0) FROM notifications")->fetchColumn();
-        $notifications = $pdo->query("SELECT * FROM notifications ORDER BY created_at DESC LIMIT 20")->fetchAll();
-    } catch (Exception $e) {
-        $totalNotifications = 0;
-        $totalSent = 0;
-        $notifications = [];
-    }
-
-    $pageTitle = 'Notifications';
-    include __DIR__ . '/includes/header.php';
-    ?>
 
     <div class="page-header">
         <h2>📢 Thông Báo Người Dùng</h2>
         <p>Gửi thông báo đến tất cả người dùng qua Telegram Bot</p>
     </div>
 
-    <?php if ($success): ?>
-        <div class="alert alert-success"><?= htmlspecialchars($success) ?></div>
-    <?php endif; ?>
-
-    <?php if ($error): ?>
-        <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
-    <?php endif; ?>
+    <div id="alertContainer">
+        <?php if ($success): ?>
+            <div class="alert alert-success"><?= htmlspecialchars($success) ?></div>
+        <?php endif; ?>
+        <?php if ($error): ?>
+            <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+        <?php endif; ?>
+    </div>
 
     <!-- Stats -->
     <div class="row g-4 mb-4">
@@ -246,9 +340,8 @@
             <h5>✍️ Tạo Thông Báo Mới</h5>
         </div>
         <div class="card-body">
-            <form method="POST" id="notificationForm" enctype="multipart/form-data">
-                <input type="hidden" name="action" value="send_broadcast">
-                
+            <form id="notificationForm" enctype="multipart/form-data">
+
                 <div class="form-group">
                     <label class="form-label">Loại Thông Báo</label>
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px;">
@@ -316,12 +409,31 @@
                 </div>
 
                 <div style="display: flex; gap: 10px;">
-                    <button type="submit" class="btn btn-primary" onclick="return confirm('Gửi thông báo đến <?= $totalUsers ?> người dùng?')">
+                    <button type="submit" id="submitBtn" class="btn btn-primary">
                         📤 Gửi Đến <?= $totalUsers ?> Users
                     </button>
                     <button type="button" class="btn btn-secondary" onclick="resetForm()">🔄 Reset</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Progress Section (shown while sending) -->
+    <div id="sendingProgress" class="card mb-4" style="display:none;">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h5 id="progressTitle">📤 Đang Gửi Thông Báo...</h5>
+            <span id="progressPct" style="font-weight: 700; color: var(--primary);">0%</span>
+        </div>
+        <div class="card-body">
+            <div style="background: rgba(255,255,255,0.1); border-radius: 20px; height: 14px; overflow: hidden; margin-bottom: 14px;">
+                <div id="progressBar" style="width:0%; height:100%; background: linear-gradient(90deg, #667eea, #a78bfa); border-radius: 20px; transition: width 0.4s ease;"></div>
+            </div>
+            <div style="display: flex; gap: 24px; font-size: 0.88rem;">
+                <span>✅ Thành công: <strong id="statSent">0</strong></span>
+                <span>❌ Thất bại: <strong id="statFailed">0</strong></span>
+                <span>📊 Tổng: <strong id="statTotal">0</strong></span>
+                <span id="progressEta" style="color: var(--text-secondary);"></span>
+            </div>
         </div>
     </div>
 
@@ -340,7 +452,8 @@
                             <tr>
                                 <th>Loại</th>
                                 <th>Tiêu Đề</th>
-                                <th>Đã Gửi</th>
+                                <th>Thành Công</th>
+                                <th>Thất Bại</th>
                                 <th>Trạng Thái</th>
                                 <th>Thời Gian</th>
                                 <th>Thao Tác</th>
@@ -361,17 +474,25 @@
                                             <span style="color: var(--primary); margin-left: 5px;" title="Có hình ảnh">🖼️</span>
                                         <?php endif; ?>
                                     </td>
-                                    <td><strong><?= $notif['sent_count'] ?></strong> users</td>
+                                    <td><strong style="color: #22c55e;"><?= intval($notif['sent_count']) ?></strong></td>
                                     <td>
-                                        <?php if ($notif['status'] === 'sent'): ?>
-                                            <span class="badge badge-success">✅ Đã Gửi</span>
-                                        <?php else: ?>
-                                            <span class="badge badge-secondary">📝 Nháp</span>
-                                        <?php endif; ?>
+                                        <?php $fc = intval($notif['failed_count'] ?? 0); ?>
+                                        <strong style="color: <?= $fc > 0 ? '#ef4444' : 'var(--text-secondary)' ?>;"><?= $fc ?></strong>
+                                    </td>
+                                    <td>
+                                        <?php
+                                        $statusMap = [
+                                            'sent'    => '<span class="badge badge-success">✅ Đã Gửi</span>',
+                                            'sending' => '<span class="badge badge-warning">⏳ Đang Gửi</span>',
+                                            'queued'  => '<span class="badge badge-info">🕐 Hàng Chờ</span>',
+                                            'draft'   => '<span class="badge badge-secondary">📝 Nháp</span>',
+                                        ];
+                                        echo $statusMap[$notif['status']] ?? '<span class="badge badge-secondary">' . htmlspecialchars($notif['status']) . '</span>';
+                                        ?>
                                     </td>
                                     <td><?= date('d/m/Y H:i', strtotime($notif['sent_at'] ?? $notif['created_at'])) ?></td>
                                     <td>
-                                        <form method="POST" style="display: inline;" onsubmit="return confirm('Xóa?')">
+                                        <form method="POST" style="display: inline;" onsubmit="return confirm('Xóa thông báo này?')">
                                             <input type="hidden" name="action" value="delete">
                                             <input type="hidden" name="id" value="<?= $notif['id'] ?>">
                                             <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
@@ -404,12 +525,19 @@
         }
         .row { display: flex; flex-wrap: wrap; margin: -10px; }
         .col-md-4 { flex: 0 0 33.333%; padding: 10px; }
+        .badge-warning { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+        .badge-info    { background: rgba(99, 102, 241, 0.2); color: #818cf8; }
         @media (max-width: 768px) { .col-md-4 { flex: 0 0 100%; } }
     </style>
 
     <script>
+        const TOTAL_USERS = <?= intval($totalUsers) ?>;
+        let isSending = false;
+        let sendStartTime = 0;
+
+        // ── Type card selection ──────────────────────────────────────────
         document.querySelectorAll('.template-card').forEach(card => {
-            card.addEventListener('click', function() {
+            card.addEventListener('click', function () {
                 document.querySelectorAll('.template-card').forEach(c => c.classList.remove('active'));
                 this.classList.add('active');
                 this.querySelector('input').checked = true;
@@ -417,57 +545,174 @@
             });
         });
 
+        // ── Live preview ─────────────────────────────────────────────────
         function updatePreview() {
-            const title = document.getElementById('notif_title').value;
+            const title   = document.getElementById('notif_title').value;
             const message = document.getElementById('notif_message').value;
-            const type = document.querySelector('input[name="type"]:checked').value;
-            const emoji = {'announcement': '📢', 'promotion': '🎉', 'update': '🔔', 'alert': '⚠️'};
+            const type    = document.querySelector('input[name="type"]:checked').value;
+            const emoji   = { announcement: '📢', promotion: '🎉', update: '🔔', alert: '⚠️' };
             const preview = document.getElementById('messagePreview');
-            
+
             if (title || message) {
-                let formatted = message
+                const formatted = message
                     .replace(/\*([^*]+)\*/g, '<strong>$1</strong>')
                     .replace(/_([^_]+)_/g, '<em>$1</em>')
                     .replace(/\n/g, '<br>');
-                
                 preview.innerHTML = `
-                    <div style="font-size: 1.1rem; margin-bottom: 6px;">
+                    <div style="font-size:1.1rem; margin-bottom:6px;">
                         ${emoji[type]} <strong>${title || 'Tiêu đề'}</strong>
                     </div>
-                    <div style="color: var(--text-primary); line-height: 1.5;">
-                        ${formatted || '<span style="color: var(--text-secondary); font-style: italic;">Nội dung...</span>'}
-                    </div>
-                `;
+                    <div style="color:var(--text-primary); line-height:1.5;">
+                        ${formatted || '<span style="color:var(--text-secondary);font-style:italic;">Nội dung...</span>'}
+                    </div>`;
             } else {
-                preview.innerHTML = '<div style="color: var(--text-secondary); font-style: italic;">Nhập nội dung để xem trước...</div>';
+                preview.innerHTML = '<div style="color:var(--text-secondary);font-style:italic;">Nhập nội dung để xem trước...</div>';
             }
+        }
+        document.getElementById('notif_title').addEventListener('input', updatePreview);
+        document.getElementById('notif_message').addEventListener('input', updatePreview);
+
+        // ── Image preview ────────────────────────────────────────────────
+        function previewImage(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    document.getElementById('imagePreview').src = e.target.result;
+                    document.getElementById('imagePreviewContainer').style.display = 'block';
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+        function removeImage() {
+            document.getElementById('notif_image').value = '';
+            document.getElementById('imagePreviewContainer').style.display = 'none';
         }
 
         function resetForm() {
             document.getElementById('notificationForm').reset();
             document.querySelectorAll('.template-card')[0].click();
+            document.getElementById('imagePreviewContainer').style.display = 'none';
+            updatePreview();
         }
 
-        document.getElementById('notif_title').addEventListener('input', updatePreview);
-        document.getElementById('notif_message').addEventListener('input', updatePreview);
-        
-        function previewImage(input) {
-            const preview = document.getElementById('imagePreview');
-            const container = document.getElementById('imagePreviewContainer');
-            
-            if (input.files && input.files[0]) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    preview.src = e.target.result;
-                    container.style.display = 'block';
-                };
-                reader.readAsDataURL(input.files[0]);
+        // ── AJAX form submit ─────────────────────────────────────────────
+        document.getElementById('notificationForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            if (isSending) return;
+
+            const btn      = document.getElementById('submitBtn');
+            const formData = new FormData(this);
+            formData.append('action', 'send_broadcast');
+
+            if (!formData.get('title') || !formData.get('message')) {
+                showAlert('danger', '❌ Vui lòng điền đầy đủ thông tin!');
+                return;
+            }
+
+            btn.disabled    = true;
+            btn.textContent = '⏳ Đang tạo...';
+
+            try {
+                const res  = await fetch('notifications.php', {
+                    method:  'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    body:    formData,
+                });
+                const data = await res.json();
+
+                if (data.error) {
+                    showAlert('danger', '❌ ' + data.error);
+                    btn.disabled    = false;
+                    btn.textContent = `📤 Gửi Đến ${TOTAL_USERS} Users`;
+                    return;
+                }
+
+                // Save successful — start batch sending
+                document.getElementById('statTotal').textContent = data.total;
+                document.getElementById('sendingProgress').style.display = '';
+                document.getElementById('sendingProgress').scrollIntoView({ behavior: 'smooth' });
+
+                isSending    = true;
+                sendStartTime = Date.now();
+                await processBatches(data.id, data.total, 0);
+
+            } catch (err) {
+                showAlert('danger', '❌ Lỗi kết nối: ' + err.message);
+                btn.disabled    = false;
+                btn.textContent = `📤 Gửi Đến ${TOTAL_USERS} Users`;
+            }
+        });
+
+        // ── Batch processing loop ────────────────────────────────────────
+        async function processBatches(notifId, total, offset) {
+            try {
+                const res  = await fetch(`notifications.php?send_batch=1&id=${notifId}&offset=${offset}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    showAlert('danger', '❌ ' + data.error);
+                    isSending = false;
+                    resetSendButton();
+                    return;
+                }
+
+                // Update progress bar
+                const processed = data.total_sent + data.total_failed;
+                const pct       = total > 0 ? Math.min(100, Math.round(processed / total * 100)) : 100;
+
+                document.getElementById('progressBar').style.width  = pct + '%';
+                document.getElementById('progressPct').textContent  = pct + '%';
+                document.getElementById('statSent').textContent     = data.total_sent;
+                document.getElementById('statFailed').textContent   = data.total_failed;
+
+                // ETA estimate
+                if (processed > 0 && !data.done) {
+                    const elapsed   = (Date.now() - sendStartTime) / 1000;
+                    const rate      = processed / elapsed;
+                    const remaining = Math.max(0, total - processed);
+                    const etaSec    = Math.round(remaining / rate);
+                    document.getElementById('progressEta').textContent =
+                        `⏱ Còn khoảng ${etaSec}s`;
+                }
+
+                if (!data.done) {
+                    await processBatches(notifId, total, data.next_offset);
+                } else {
+                    // All done
+                    isSending = false;
+                    document.getElementById('progressBar').style.background = '#22c55e';
+                    document.getElementById('progressTitle').textContent     = '✅ Gửi Hoàn Tất!';
+                    document.getElementById('progressEta').textContent       = '';
+
+                    const failMsg = data.total_failed > 0
+                        ? ` (${data.total_failed} thất bại — thường do user đã block bot)`
+                        : '';
+                    showAlert('success', `✅ Đã gửi thành công đến <strong>${data.total_sent}</strong> người dùng!${failMsg}`);
+
+                    resetForm();
+                    resetSendButton();
+
+                    // Reload history after 2s
+                    setTimeout(() => location.reload(), 2000);
+                }
+
+            } catch (err) {
+                showAlert('danger', '❌ Lỗi kết nối: ' + err.message);
+                isSending = false;
+                resetSendButton();
             }
         }
-        
-        function removeImage() {
-            document.getElementById('notif_image').value = '';
-            document.getElementById('imagePreviewContainer').style.display = 'none';
+
+        function resetSendButton() {
+            const btn       = document.getElementById('submitBtn');
+            btn.disabled    = false;
+            btn.textContent = `📤 Gửi Đến ${TOTAL_USERS} Users`;
+        }
+
+        function showAlert(type, msg) {
+            const container = document.getElementById('alertContainer');
+            container.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+            container.scrollIntoView({ behavior: 'smooth' });
         }
     </script>
 </body>

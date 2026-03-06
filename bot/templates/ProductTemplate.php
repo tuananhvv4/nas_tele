@@ -145,7 +145,10 @@ class ProductTemplate {
             $keyboard[] = $navRow;
         }
         
-        // Back button
+        // Refresh + back buttons
+        $keyboard[] = [
+            ['text' => '🔄 Cập nhật sản phẩm', 'callback_data' => 'show_products']
+        ];
         $keyboard[] = [
             ['text' => '🏠 Trang chủ', 'callback_data' => 'start']
         ];
