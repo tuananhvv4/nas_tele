@@ -200,6 +200,7 @@ while ((time() - $startTime) < 25) {
                         $userUsername = $userData['username'] ?? 'Không xác định';
                         
                         $paymentsProcessed++;
+                        
                         $msg = "<b>Đã thanh toán cho đơn hàng #{$order['id']}</b>";
                         $msg .= "\n\n";
                         $msg .= "Sản phẩm: " . $orderData['product_name'];
@@ -214,6 +215,8 @@ while ((time() - $startTime) < 25) {
                         $msg .= "\n";
                         $msg .= "Thời gian: " . date('d/m/Y H:i:s');
                         $msg .= "\n";
+
+                        logMessage("   → Sending message to admin: " . $msg);
                         $telegram->sendAdminMessage($msg);
                     }
                 } catch (Exception $e) {
