@@ -215,7 +215,7 @@ while ((time() - $startTime) < 25) {
                         $msg .= "\n";
                         $msg .= "Số lượng: " . $quantity;
                         $msg .= "\n";
-                        $msg .= "Tổng tiền: " . number_format($totalPrice);
+                        $msg .= "Tổng tiền: " . number_format($totalPrice, 0, ',', '.') . " VNĐ";
                         $msg .= "\n";
                         $msg .= "Mã giao dịch: " . $transactionCode;
                         $msg .= "\n";
