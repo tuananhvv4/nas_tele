@@ -193,11 +193,15 @@ while ((time() - $startTime) < 25) {
                             logMessage("   → Account sent to Telegram user");
                         }
 
+                        logMessage("   → Order data: " . json_encode($orderData));
+
                         $userStmt = $pdo->prepare("SELECT username FROM users WHERE telegram_id = ?");
                         $userStmt->execute([$orderData['telegram_id']]);
                         $userData = $userStmt->fetch(PDO::FETCH_ASSOC);
 
                         $userUsername = $userData['username'] ?? 'Không xác định';
+
+                        logMessage("   → User username: " . $userUsername);
                         
                         $paymentsProcessed++;
 
