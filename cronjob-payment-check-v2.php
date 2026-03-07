@@ -178,7 +178,7 @@ while ((time() - $startTime) < 25) {
                         
                         // Get order with account data
                         $orderStmt = $pdo->prepare("
-                            SELECT o.*, p.name as product_name, o.telegram_id as user_telegram_id
+                            SELECT o.*, p.name as product_name
                             FROM orders o
                             JOIN products p ON o.product_id = p.id
                             WHERE o.id = ?
@@ -194,7 +194,7 @@ while ((time() - $startTime) < 25) {
                         }
 
                         $userStmt = $pdo->prepare("SELECT username FROM users WHERE telegram_id = ?");
-                        $userStmt->execute([$orderData['user_telegram_id']]);
+                        $userStmt->execute([$orderData['telegram_id']]);
                         $userData = $userStmt->fetch(PDO::FETCH_ASSOC);
 
                         $userUsername = $userData['username'] ?? 'Không xác định';
