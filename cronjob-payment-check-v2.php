@@ -111,7 +111,7 @@ while ((time() - $startTime) < 25) {
         $stmt = $pdo->query("
             SELECT * FROM orders 
             WHERE payment_status = 'pending' 
-            AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)
+            AND created_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE)
             ORDER BY created_at DESC
         ");
         
@@ -200,20 +200,28 @@ while ((time() - $startTime) < 25) {
                         $userUsername = $userData['username'] ?? 'Không xác định';
                         
                         $paymentsProcessed++;
+
+                        $orderId = $order['id'] ?? 'Unknown';
+                        $productName = $orderData['product_name'] ?? 'Unknown';
+                        $quantity = $order['quantity'] ?? 'Unknown';
+                        $totalPrice = $order['total_price'] ?? 0;
+                        $transactionCode = $order['transaction_code'] ?? 'Unknown';
+                        $userUsername = $userData['username'] ?? 'Unknown';
+                        $createdAt = date('d/m/Y H:i:s');
                         
-                        $msg = "<b>Đã thanh toán cho đơn hàng #{$order['id']}</b>";
+                        $msg = "<b>Đã thanh toán cho đơn hàng #{$orderId}</b>";
                         $msg .= "\n\n";
-                        $msg .= "Sản phẩm: " . $orderData['product_name'];
+                        $msg .= "Sản phẩm: " . $productName;
                         $msg .= "\n";
                         $msg .= "Số lượng: " . $quantity;
                         $msg .= "\n";
-                        $msg .= "Tổng tiền: " . formatVND($order['total_price']);
+                        $msg .= "Tổng tiền: " . formatVND($totalPrice);
                         $msg .= "\n";
-                        $msg .= "Mã giao dịch: " . $order['transaction_code'];
+                        $msg .= "Mã giao dịch: " . $transactionCode;
                         $msg .= "\n";
                         $msg .= "User: " . $userUsername;
                         $msg .= "\n";
-                        $msg .= "Thời gian: " . date('d/m/Y H:i:s');
+                        $msg .= "Thời gian: " . $createdAt;
                         $msg .= "\n";
 
                         logMessage("   → Sending message to admin: " . $msg);
