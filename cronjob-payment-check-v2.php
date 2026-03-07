@@ -196,6 +196,8 @@ while ((time() - $startTime) < 25) {
                         $userStmt = $pdo->prepare("SELECT username FROM users WHERE telegram_id = ?");
                         $userStmt->execute([$orderData['user_telegram_id']]);
                         $userData = $userStmt->fetch(PDO::FETCH_ASSOC);
+
+                        $userUsername = $userData['username'] ?? 'Không xác định';
                         
                         $paymentsProcessed++;
                         $msg = "<b>Đã thanh toán cho đơn hàng #{$order['id']}</b>";
@@ -208,7 +210,7 @@ while ((time() - $startTime) < 25) {
                         $msg .= "\n";
                         $msg .= "Mã giao dịch: " . $order['transaction_code'];
                         $msg .= "\n";
-                        $msg .= "User: " . $userData['username'];
+                        $msg .= "User: " . $userUsername;
                         $msg .= "\n";
                         $msg .= "Thời gian: " . date('d/m/Y H:i:s');
                         $msg .= "\n";
