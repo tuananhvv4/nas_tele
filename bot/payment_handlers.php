@@ -15,7 +15,7 @@ function handleWalletPayment($bot, $chatId, $userId, $productId, $quantity, $pdo
         $stmt->execute([$productId]);
         $product = $stmt->fetch();
         
-        $stmt = $pdo->prepare("SELECT id, wallet_balance FROM users WHERE telegram_id = ?");
+        $stmt = $pdo->prepare("SELECT id, wallet_balance, username FROM users WHERE telegram_id = ?");
         $stmt->execute([$userId]);
         $user = $stmt->fetch();
         
@@ -151,6 +151,8 @@ function handleWalletPayment($bot, $chatId, $userId, $productId, $quantity, $pdo
         $msg .= "Tổng tiền: " . formatVND($totalPrice);
         $msg .= "\n";
         $msg .= "Mã giao dịch: " . $transactionCode;
+        $msg .= "\n";
+        $msg .= "User: " . $user['username'];
         $msg .= "\n";
         $msg .= "Thời gian: " . date('d/m/Y H:i:s');
         $msg .= "\n";
