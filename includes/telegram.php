@@ -196,6 +196,13 @@ class TelegramNotifier {
     }
 
     /**
+     * Send message to admin
+     */
+    public function sendAdminMessage($message) {
+        return $this->bot->sendAdminMessage($message);
+    }
+
+    /**
      * Gửi file .txt chứa thông tin tài khoản cho khách
      */
     private function sendAccountFile($chatId, $orderData, $product, $accountsData) {

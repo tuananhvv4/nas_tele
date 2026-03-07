@@ -112,6 +112,16 @@
             } else {
                 $success = 'Đã cập nhật cài đặt bảo trì!';
             }
+        } else if ($action === 'change_password') {
+            $newPassword = $_POST['new_password'] ?? '';
+            if ($newPassword) {
+                $passwordHash = password_hash($newPassword, PASSWORD_BCRYPT);
+                $stmt = $pdo->prepare("UPDATE users SET password_hash = ? WHERE username = 'admin'");
+                $stmt->execute([$passwordHash]);
+                $success = 'Đã thay đổi mật khẩu admin!';
+            } else {
+                $error = 'Vui lòng điền mật khẩu mới!';
+            }
         }
     }
 
@@ -289,6 +299,22 @@
         </div>
     </div>
 
+    <!-- Change Password Admin -->
+    <div class="card">
+        <div class="card-header">
+            <h5>🔒 Thay Đổi Mật Khẩu Admin</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST">
+                <input type="hidden" name="action" value="change_password">
+                <div class="form-group">
+                    <label class="form-label">Mật Khẩu Mới</label>
+                    <input type="password" class="form-control" name="new_password" placeholder="Mật Khẩu Mới">
+                </div>
+                <button type="submit" class="btn btn-primary">🔒 Thay Đổi Mật Khẩu</button>
+            </form>
+        </div>
+    </div>
     <?php include __DIR__ . '/includes/footer.php'; ?>
 
     <style>

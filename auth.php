@@ -58,45 +58,45 @@ if (isset($_POST['login'])) {
 }
 
 // Handle Register
-if (isset($_POST['register'])) {
-    $username = trim($_POST['reg_username'] ?? '');
-    $email = trim($_POST['reg_email'] ?? '');
-    $password = $_POST['reg_password'] ?? '';
-    $confirm_password = $_POST['reg_confirm_password'] ?? '';
+// if (isset($_POST['register'])) {
+//     $username = trim($_POST['reg_username'] ?? '');
+//     $email = trim($_POST['reg_email'] ?? '');
+//     $password = $_POST['reg_password'] ?? '';
+//     $confirm_password = $_POST['reg_confirm_password'] ?? '';
 
-    if ($username && $email && $password && $confirm_password) {
-        if ($password !== $confirm_password) {
-            $message = 'Mật khẩu xác nhận không khớp!';
-            $messageType = 'error';
-        } elseif (strlen($password) < 6) {
-            $message = 'Mật khẩu phải có ít nhất 6 ký tự!';
-            $messageType = 'error';
-        } else {
-            // Check if username or email exists
-            $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
-            $stmt->execute([$username, $email]);
+//     if ($username && $email && $password && $confirm_password) {
+//         if ($password !== $confirm_password) {
+//             $message = 'Mật khẩu xác nhận không khớp!';
+//             $messageType = 'error';
+//         } elseif (strlen($password) < 6) {
+//             $message = 'Mật khẩu phải có ít nhất 6 ký tự!';
+//             $messageType = 'error';
+//         } else {
+//             // Check if username or email exists
+//             $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
+//             $stmt->execute([$username, $email]);
             
-            if ($stmt->fetch()) {
-                $message = 'Tên đăng nhập hoặc email đã tồn tại!';
-                $messageType = 'error';
-            } else {
-                $passwordHash = password_hash($password, PASSWORD_BCRYPT);
-                $stmt = $pdo->prepare("INSERT INTO users (username, email, password_hash, role, package) VALUES (?, ?, ?, 'user', 'free')");
+//             if ($stmt->fetch()) {
+//                 $message = 'Tên đăng nhập hoặc email đã tồn tại!';
+//                 $messageType = 'error';
+//             } else {
+//                 $passwordHash = password_hash($password, PASSWORD_BCRYPT);
+//                 $stmt = $pdo->prepare("INSERT INTO users (username, email, password_hash, role, package) VALUES (?, ?, ?, 'user', 'free')");
                 
-                if ($stmt->execute([$username, $email, $passwordHash])) {
-                    $message = 'Đăng ký thành công! Vui lòng đăng nhập.';
-                    $messageType = 'success';
-                } else {
-                    $message = 'Đăng ký thất bại! Vui lòng thử lại.';
-                    $messageType = 'error';
-                }
-            }
-        }
-    } else {
-        $message = 'Vui lòng điền đầy đủ thông tin!';
-        $messageType = 'error';
-    }
-}
+//                 if ($stmt->execute([$username, $email, $passwordHash])) {
+//                     $message = 'Đăng ký thành công! Vui lòng đăng nhập.';
+//                     $messageType = 'success';
+//                 } else {
+//                     $message = 'Đăng ký thất bại! Vui lòng thử lại.';
+//                     $messageType = 'error';
+//                 }
+//             }
+//         }
+//     } else {
+//         $message = 'Vui lòng điền đầy đủ thông tin!';
+//         $messageType = 'error';
+//     }
+// }
 ?>
 <!DOCTYPE html>
 <html lang="vi">
@@ -329,8 +329,8 @@ if (isset($_POST['register'])) {
         <div class="right-panel">
             <div class="form-container">
                 <div class="tabs">
-                    <div class="tab active" onclick="switchTab('login')">Đăng Nhập</div>
-                    <div class="tab" onclick="switchTab('register')">Đăng Ký</div>
+                    <!-- <div class="tab active" onclick="switchTab('login')">Đăng Nhập</div> -->
+                    <!-- <div class="tab" onclick="switchTab('register')">Đăng Ký</div> -->
                 </div>
 
                 <?php if ($message): ?>
@@ -355,7 +355,7 @@ if (isset($_POST['register'])) {
                 </div>
 
                 <!-- Register Form -->
-                <div class="form-content" id="register-form">
+                <!-- <div class="form-content" id="register-form">
                     <form method="POST">
                         <div class="form-group">
                             <label>Tên đăng nhập</label>
@@ -375,7 +375,7 @@ if (isset($_POST['register'])) {
                         </div>
                         <button type="submit" name="register" class="btn">Đăng Ký</button>
                     </form>
-                </div>
+                </div> -->
             </div>
         </div>
     </div>

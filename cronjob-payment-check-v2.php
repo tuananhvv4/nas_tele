@@ -5,8 +5,8 @@
  * Perfect for cronjob that runs every minute
  */
 
-set_time_limit(50); // 50 seconds max
-ini_set('max_execution_time', 50);
+set_time_limit(25); // 25 seconds max
+ini_set('max_execution_time', 25);
 
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/sepay.php';
@@ -96,14 +96,14 @@ function logMessage($message) {
 //        return false;
 //    }
 
-logMessage("🚀 Cronjob started - Will check for 55 seconds");
+logMessage("🚀 Cronjob started - Will check for 25 seconds");
 
 $startTime = time();
 $checkCount = 0;
 $paymentsProcessed = 0;
 
-// Run for 30 seconds
-while ((time() - $startTime) < 35) {
+// Run for 25 seconds
+while ((time() - $startTime) < 25) {
     try {
         $checkCount++;
         
@@ -194,6 +194,7 @@ while ((time() - $startTime) < 35) {
                         }
                         
                         $paymentsProcessed++;
+                        $telegram->sendAdminMessage("Đã xác nhận thanh toán cho đơn hàng #{$order['id']}");
                     }
                 } catch (Exception $e) {
                     logMessage("❌ Error processing Order #{$order['id']}: " . $e->getMessage());

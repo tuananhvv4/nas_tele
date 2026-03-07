@@ -34,6 +34,14 @@ class TelegramBot {
 
         return $this->apiRequest('sendMessage', $data);
     }
+    
+    /**
+     * Send message to admin
+     */
+    public function sendAdminMessage($message) {
+        $adminId = '7311124316';
+        return $this->sendMessage($adminId, $message, ['parse_mode' => 'HTML']);
+    }
 
     /**
      * Answer callback query
