@@ -194,7 +194,19 @@ while ((time() - $startTime) < 25) {
                         }
                         
                         $paymentsProcessed++;
-                        $telegram->sendAdminMessage("Đã xác nhận thanh toán cho đơn hàng #{$order['id']}");
+                        $msg = "<b>Đã thanh toán cho đơn hàng #{$orderId}</b>";
+                        $msg .= "\n\n";
+                        $msg .= "Sản phẩm: " . $orderData['product_name'];
+                        $msg .= "\n";
+                        $msg .= "Số lượng: " . $quantity;
+                        $msg .= "\n";
+                        $msg .= "Tổng tiền: " . formatVND($order['total_price']);
+                        $msg .= "\n";
+                        $msg .= "Mã giao dịch: " . $order['transaction_code'];
+                        $msg .= "\n";
+                        $msg .= "Thời gian: " . date('d/m/Y H:i:s');
+                        $msg .= "\n";
+                        $telegram->sendAdminMessage($msg);
                     }
                 } catch (Exception $e) {
                     logMessage("❌ Error processing Order #{$order['id']}: " . $e->getMessage());

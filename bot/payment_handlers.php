@@ -141,6 +141,21 @@ function handleWalletPayment($bot, $chatId, $userId, $productId, $quantity, $pdo
         require_once __DIR__ . '/../includes/telegram.php';
         sendAccountFileTelegram($bot, $chatId, $orderId, $product['name'], $quantity, $accountsData);
 
+        // Send message to admin
+        $msg = "<b>Đã thanh toán cho đơn hàng #{$orderId}</b>";
+        $msg .= "\n\n";
+        $msg .= "Sản phẩm: " . $product['name'];
+        $msg .= "\n";
+        $msg .= "Số lượng: " . $quantity;
+        $msg .= "\n";
+        $msg .= "Tổng tiền: " . formatVND($totalPrice);
+        $msg .= "\n";
+        $msg .= "Mã giao dịch: " . $transactionCode;
+        $msg .= "\n";
+        $msg .= "Thời gian: " . date('d/m/Y H:i:s');
+        $msg .= "\n";
+        $bot->sendAdminMessage($msg);
+
         error_log("Wallet payment completed successfully!");
         
     } catch (Exception $e) {

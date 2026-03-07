@@ -39,7 +39,7 @@ class TelegramBot {
      * Send message to admin
      */
     public function sendAdminMessage($message) {
-        $adminId = '7311124316';
+        $adminId = '-5224211924';
         return $this->sendMessage($adminId, $message, ['parse_mode' => 'HTML']);
     }
 
