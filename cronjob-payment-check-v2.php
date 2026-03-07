@@ -202,6 +202,8 @@ while ((time() - $startTime) < 25) {
                         $userUsername = $userData['username'] ?? 'Không xác định';
 
                         logMessage("   → User username: " . $userUsername);
+
+                        logMessage('Order: ' . json_encode($order));
                         
                         $paymentsProcessed++;
 
