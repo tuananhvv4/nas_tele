@@ -6,11 +6,24 @@ require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/libs/db.php';
 requireLogin();
 
-    $dbHelper = new DB();
+$dbHelper = new DB();
 
-    $success = '';
-    $error = '';
-    $botInfo = null;
+$success = '';
+$error   = '';
+$botInfo = null;
+
+function telegramGet(string $url): ?array {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_SSL_VERIFYPEER => false,
+    ]);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    return $response ? json_decode($response, true) : null;
+}
 
     // Handle bot configuration
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -21,10 +34,7 @@ requireLogin();
             $botName = trim($_POST['bot_name'] ?? 'Bot Shop');
 
             if ($botToken) {
-                // Test bot token
-                $apiUrl = "https://api.telegram.org/bot{$botToken}/getMe";
-                $response = @file_get_contents($apiUrl);
-                $result = json_decode($response, true);
+                $result = telegramGet("https://api.telegram.org/bot{$botToken}/getMe");
 
                 if ($result && $result['ok']) {
                     $botUsername = $result['result']['username'];
@@ -57,9 +67,7 @@ requireLogin();
                 $host = $_SERVER['HTTP_HOST'];
                 $webhookUrl = $protocol . '://' . $host . '/bot/webhook.php';
 
-                $apiUrl = "https://api.telegram.org/bot{$bot['bot_token']}/setWebhook?url=" . urlencode($webhookUrl);
-                $response = @file_get_contents($apiUrl);
-                $result = json_decode($response, true);
+                $result = telegramGet("https://api.telegram.org/bot{$bot['bot_token']}/setWebhook?url=" . urlencode($webhookUrl));
 
                 if ($result && $result['ok']) {
                     // Update webhook URL in database
@@ -79,12 +87,10 @@ requireLogin();
     // Get current bot config
     $bot = $pdo->query("SELECT * FROM bots WHERE id = 1")->fetch();
 
-    // Get webhook info if bot is configured
-    if ($bot && $bot['bot_token'] && $bot['is_configured']) {
-        $apiUrl = "https://api.telegram.org/bot{$bot['bot_token']}/getWebhookInfo";
-        $response = @file_get_contents($apiUrl);
-        $webhookInfo = json_decode($response, true);
-    }
+// Get webhook info if bot is configured
+if ($bot && $bot['bot_token'] && $bot['is_configured']) {
+    $webhookInfo = telegramGet("https://api.telegram.org/bot{$bot['bot_token']}/getWebhookInfo");
+}
 
 $pageTitle = 'Bot Configuration';
 include __DIR__ . '/includes/header.php';
