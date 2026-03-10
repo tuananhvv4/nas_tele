@@ -1,17 +1,7 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mã Khuyến Mãi - Bot Shop</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css">
-</head>
-<body>
-    <?php
-    require_once __DIR__ . '/config/db.php';
-    require_once __DIR__ . '/includes/auth.php';
-    requireLogin();
+<?php
+require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/auth.php';
+requireLogin();
 
     $success = '';
     $error = '';
@@ -74,9 +64,9 @@
     $activeCodes = count(array_filter($promoCodes, fn($p) => $p['status'] === 'active'));
     $totalUses = $pdo->query("SELECT COUNT(*) FROM promo_code_usage")->fetchColumn();
 
-    $pageTitle = 'Promo Codes';
-    include __DIR__ . '/includes/header.php';
-    ?>
+$pageTitle = 'Promo Codes';
+include __DIR__ . '/includes/header.php';
+?>
 
     <div class="page-header">
         <h2>🎟️ Quản Lý Mã Khuyến Mãi</h2>
@@ -250,5 +240,3 @@
             .col-md-3, .col-md-4, .col-md-6 { flex: 0 0 100%; } 
         }
     </style>
-</body>
-</html>

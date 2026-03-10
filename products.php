@@ -1,17 +1,7 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quản Lý Sản Phẩm - Bot Shop Admin</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css">
-</head>
-<body>
-    <?php
-    require_once __DIR__ . '/config/db.php';
-    require_once __DIR__ . '/includes/auth.php';
-    requireLogin();
+<?php
+require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/auth.php';
+requireLogin();
 
     $success = $_GET['success'] ?? '';
     $error = '';
@@ -181,9 +171,9 @@
         ORDER BY p.display_order ASC, p.id ASC
     ")->fetchAll();
 
-    $pageTitle = 'Products';
-    include __DIR__ . '/includes/header.php';
-    ?>
+$pageTitle = 'Products';
+include __DIR__ . '/includes/header.php';
+?>
 
     <div class="page-header d-flex justify-content-between align-items-center">
         <div>
@@ -657,6 +647,4 @@
             color: var(--primary);
         }
     </style>
-</body>
-</html>
 

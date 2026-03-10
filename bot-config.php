@@ -1,21 +1,10 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cấu Hình Bot - Bot Shop Admin</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css">
-</head>
-<body>
-    <?php
+<?php
+// define('IN_SITE', true);
 
-    // define('IN_SITE', true);
-
-    require_once __DIR__ . '/config/db.php';
-    require_once __DIR__ . '/includes/auth.php';
-    require_once __DIR__ . '/libs/db.php';
-    requireLogin();
+require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/libs/db.php';
+requireLogin();
 
     $dbHelper = new DB();
 
@@ -97,9 +86,9 @@
         $webhookInfo = json_decode($response, true);
     }
 
-    $pageTitle = 'Bot Configuration';
-    include __DIR__ . '/includes/header.php';
-    ?>
+$pageTitle = 'Bot Configuration';
+include __DIR__ . '/includes/header.php';
+?>
 
     <div class="page-header">
         <h2>🤖 Cấu Hình Bot Telegram</h2>
@@ -278,8 +267,6 @@
         @media (max-width: 768px) {
             .col-md-6 {
                 flex: 0 0 100%;
-            }
         }
+    }
     </style>
-</body>
-</html>

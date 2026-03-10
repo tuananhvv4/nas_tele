@@ -1,18 +1,8 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Đơn Hàng - Bot Shop</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css">
-</head>
-<body>
-    <?php
-    require_once __DIR__ . '/config/db.php';
-    require_once __DIR__ . '/includes/auth.php';
-    require_once __DIR__ . '/libs/helper.php';
-    requireLogin();
+<?php
+require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/libs/helper.php';
+requireLogin();
 
     // Handle bulk delete
     if (isset($_POST['bulk_delete']) && !empty($_POST['order_ids'])) {
@@ -114,9 +104,9 @@
         '0'   => 'Tất cả',
     ];
 
-    $pageTitle = 'Orders';
-    include __DIR__ . '/includes/header.php';
-    ?>
+$pageTitle = 'Orders';
+include __DIR__ . '/includes/header.php';
+?>
 
     <div class="page-header">
         <h2>📦 Quản Lý Đơn Hàng</h2>
@@ -724,5 +714,3 @@
         setButtonLoading('btnSaveAndNotify', false);
     }
     </script>
-</body>
-</html>

@@ -1,23 +1,13 @@
 <?php
-session_start();
-if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
-    exit;
-}
+require_once __DIR__ . '/config/db.php';
+require_once __DIR__ . '/includes/auth.php';
+requireLogin();
 
-function getAdminUsername() {
-    return $_SESSION['username'] ?? 'Admin';
-}
+$pageTitle = 'Guide';
+include __DIR__ . '/includes/header.php';
 ?>
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hướng Dẫn - Bot Shop</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/style.css">
-    <style>
+
+<style>
         .standalone-guide {
             margin-left: var(--sidebar-width, 280px);
             padding: 40px;
@@ -191,10 +181,6 @@ function getAdminUsername() {
             text-decoration: underline;
         }
     </style>
-</head>
-<body>
-    <!-- Include sidebar from header -->
-    <?php include __DIR__ . '/includes/header.php'; ?>
 
     <div class="standalone-guide">
         <a href="dashboard.php" class="back-link">← Quay lại Dashboard</a>
@@ -830,5 +816,5 @@ function getAdminUsername() {
             faqItem.classList.toggle('active');
         }
     </script>
-</body>
-</html>
+
+<?php include __DIR__ . '/includes/footer.php'; ?>
