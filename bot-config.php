@@ -79,7 +79,7 @@
                     
                     $success = 'Đã thiết lập webhook thành công!';
                 } else {
-                    $error = 'Thiết lập webhook thất bại! ' . ($result['description'] ?? '');
+                    $error = 'Thiết lập webhook thất bại! ' . 'data: ' . json_encode($result);
                 }
             } else {
                 $error = 'Vui lòng cấu hình bot token trước!';
