@@ -128,16 +128,21 @@ class TelegramNotifier {
             //         $accountsData[] = $account;
             //     }
             // }
+
+            $accountsData = [];
+            foreach ($accountRecords as $account) {
+                $accountsData[] = $account['account_data'];
+            }
             
-            // // Fallback: if no accounts found, log error
-            // if (empty($accountsData)) {
-            //     error_log("WARNING: No accounts found for Order #{$order['id']}, Product #{$orderData['product_id']}, Quantity: " . ($orderData['quantity'] ?? 1));
-            //     return false;
-            // }
+            // Fallback: if no accounts found, log error
+            if (empty($accountsData)) {
+                error_log("WARNING: No accounts found for Order #{$order['id']}, Product #{$orderData['product_id']}, Quantity: " . ($orderData['quantity'] ?? 1));
+                return false;
+            }
             
             // Use DeliveryTemplate to format message
             require_once __DIR__ . '/../bot/templates/DeliveryTemplate.php';
-            $message = DeliveryTemplate::renderQRSuccess($orderData, $product, $accountRecords);
+            $message = DeliveryTemplate::renderQRSuccess($orderData, $product, $accountsData);
             
             // Create keyboard
             $keyboard = [
@@ -184,7 +189,7 @@ class TelegramNotifier {
             $this->bot->sendMessage($chatId, $message, $options);
 
             // Gửi file .txt chứa thông tin tài khoản
-            $this->sendAccountFile($chatId, $orderData, $product, $accountRecords);
+            $this->sendAccountFile($chatId, $orderData, $product, $accountsData);
 
             error_log("Account sent to user: Order #{$order['id']}, Telegram ID: {$chatId}");
             return true;
@@ -308,7 +313,8 @@ class TelegramNotifier {
  * @param int         $orderId   ID đơn hàng
  * @param string      $productName Tên sản phẩm
  * @param int         $quantity  Số lượng
- * @param array       $accounts  Mảng accounts — mỗi phần tử là string hoặc array {username, password, twofa?}
+ * @param array       $accounts  Mảng accounts — mỗi phần tử là string hoặc array {username, password, twofa?} // logic cũ
+ * @param array       $accounts  Mảng accounts — mỗi phần tử là string // logic mới
  * @param array       $keyboard  Inline keyboard (optional)
  */
 function sendAccountFileTelegram($bot, $chatId, $orderId, $productName, $quantity, $accounts, $keyboard = []) {

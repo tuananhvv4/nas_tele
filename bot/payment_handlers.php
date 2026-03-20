@@ -87,6 +87,7 @@ function handleWalletPayment($bot, $chatId, $userId, $productId, $quantity, $pdo
             LIMIT ?
         ");
         $stmt->execute([$productId, $quantity]);
+        // Lấy tất cả account từ product_accounts
         $accounts = $stmt->fetchAll();
         
         foreach ($accounts as $account) {
@@ -121,6 +122,12 @@ function handleWalletPayment($bot, $chatId, $userId, $productId, $quantity, $pdo
             
         //     $accountsData[] = $accountData;
         // }
+
+        // Chuẩn bị dữ liệu để đưa vào file
+        $accountsData = [];
+        foreach ($accounts as $account) {
+            $accountsData[] = $account['account_data'];
+        }
         
         // Get order data for template
         $orderData = [
@@ -133,13 +140,13 @@ function handleWalletPayment($bot, $chatId, $userId, $productId, $quantity, $pdo
         
         // Use DeliveryTemplate to format message
         require_once __DIR__ . '/templates/DeliveryTemplate.php';
-        $msg = DeliveryTemplate::renderWalletSuccess($orderData, $product, $accounts, $result['new_balance']);
+        $msg = DeliveryTemplate::renderWalletSuccess($orderData, $product, $accountsData, $result['new_balance']);
         
         $bot->editMessage($chatId, $messageId, $msg);
 
         // Gửi file .txt chứa thông tin tài khoản
         require_once __DIR__ . '/../includes/telegram.php';
-        sendAccountFileTelegram($bot, $chatId, $orderId, $product['name'], $quantity, $accounts);
+        sendAccountFileTelegram($bot, $chatId, $orderId, $product['name'], $quantity, $accountsData);
 
         // Send message to admin
         $msg = "<b>Đã thanh toán cho đơn hàng #{$orderId}</b>";
