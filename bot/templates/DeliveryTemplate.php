@@ -52,20 +52,13 @@ class DeliveryTemplate {
      */
     private static function renderWalletDefault($order, $product, $accounts, $newBalance) {
         $msg = "✅ <b>THANH TOÁN THÀNH CÔNG!</b>\n\n";
-        $msg .= "📦 <b>Sản phẩm:</b> {$product['name']}\n";
-        $msg .= "🔢 <b>Số lượng:</b> {$order['quantity']}\n";
-        $msg .= "💰 <b>Đã thanh toán:</b> " . number_format($order['total_price'], 0, ',', '.') . " VNĐ\n";
+        $msg .= "📦 <b>Sản phẩm:</b> {$product['name']} x {$order['quantity']}\n";
+        $msg .= "� <b>Số tiền:</b> " . number_format($order['total_price'], 0, ',', '.') . " VNĐ\n";
         $msg .= "💳 <b>Số dư còn lại:</b> " . number_format($newBalance, 0, ',', '.') . " VNĐ\n\n";
-        $msg .= "🔑 <b>TÀI KHOẢN CỦA BẠN:</b>\n";
-        
-        // Build all accounts in one code block
-        $accountsText = "";
-        foreach ($accounts as $index => $account) {
-            if ($index > 0) $accountsText .= "\n";
-            $accountsText .= "{$account['username']} | {$account['password']}";
-        }
-        $msg .= "<pre>{$accountsText}</pre>\n\n";
-        
+        $msg .= "� <b>Mã giao dịch:</b> <code>{$order['transaction_code']}</code>\n";
+        $msg .= "⏰ " . date('d/m/Y H:i', strtotime($order['created_at'])) . "\n";
+        $msg .= "━━━━━━━━━━━━━━━━━━━\n";
+
         // Add custom message if exists
         if (!empty($product['custom_message'])) {
             $msg .= $product['custom_message'] . "\n\n";
@@ -76,8 +69,9 @@ class DeliveryTemplate {
             $msg .= "🔗 Đăng nhập tại: {$product['login_url']}\n\n";
         }
         
-        $msg .= "📋 <b>Mã giao dịch:</b> <code>{$order['transaction_code']}</code>\n";
-        $msg .= "⏰ " . date('d/m/Y H:i', strtotime($order['created_at']));
+        $msg .= "━━━━━━━━━━━━━━━━━━━\n";
+        $msg .= "🔑 <b>Vui lòng xem tài khoản trong file .txt phía dưới</b>\n\n";
+        $msg .= "Cảm ơn bạn đã mua hàng! 🙏";
         
         return $msg;
     }
@@ -87,34 +81,26 @@ class DeliveryTemplate {
      */
     private static function renderWalletStyle1($order, $product, $accounts, $newBalance) {
         $msg = "✅ <b>THANH TOÁN THÀNH CÔNG!</b>\n\n";
-        $msg .= "📦 <b>Sản phẩm:</b> {$product['name']}\n";
-        $msg .= "🔢 <b>Số lượng:</b> {$order['quantity']}\n";
-        $msg .= "💰 <b>Đã thanh toán:</b> " . number_format($order['total_price'], 0, ',', '.') . " VNĐ\n";
+        $msg .= "📦 <b>Sản phẩm:</b> {$product['name']} x {$order['quantity']}\n";
+        $msg .= "💰 <b>Số tiền:</b> " . number_format($order['total_price'], 0, ',', '.') . " VNĐ\n";
         $msg .= "💳 <b>Số dư còn lại:</b> " . number_format($newBalance, 0, ',', '.') . " VNĐ\n\n";
+        $msg .= "📋 <b>Mã giao dịch:</b> <code>{$order['transaction_code']}</code>\n";
+        $msg .= "⏰ " . date('d/m/Y H:i', strtotime($order['created_at'])) . "\n";
         $msg .= "━━━━━━━━━━━━━━━━━━━\n";
-        $msg .= "🔑 <b>TÀI KHOẢN CỦA BẠN:</b>\n";
-        
-        // Build all accounts in one code block
-        $accountsText = "";
-        foreach ($accounts as $index => $account) {
-            if ($index > 0) $accountsText .= "\n";
-            $accountsText .= "{$account['username']} | {$account['password']}";
-        }
-        $msg .= "<pre>{$accountsText}</pre>\n";
-        
-        // Add login URL if exists
-        if (!empty($product['login_url'])) {
-            $msg .= "\nVui lòng đăng nhập vào {$product['login_url']} để tiện lấy OTP nhé!\n";
-        }
         
         // Add custom message if exists
         if (!empty($product['custom_message'])) {
             $msg .= $product['custom_message'] . "\n";
         }
+
+        // Add login URL if exists
+        if (!empty($product['login_url'])) {
+            $msg .= "\nVui lòng đăng nhập vào {$product['login_url']} để tiện lấy OTP nhé!\n";
+        }
         
         $msg .= "━━━━━━━━━━━━━━━━━━━\n";
-        $msg .= "📋 <b>Mã giao dịch:</b> <code>{$order['transaction_code']}</code>\n";
-        $msg .= "⏰ " . date('d/m/Y H:i', strtotime($order['created_at']));
+        $msg .= "🔑 <b>Vui lòng xem tài khoản trong file .txt phía dưới</b>\n\n";
+        $msg .= "Cảm ơn bạn đã mua hàng! 🙏";
         
         return $msg;
     }
@@ -124,9 +110,11 @@ class DeliveryTemplate {
      */
     private static function renderQRDefault($order, $product, $accounts) {
         $msg = "🎉 <b>THANH TOÁN THÀNH CÔNG!</b>\n\n";
-        $msg .= "✅ Đơn hàng #{$order['id']} đã được xác nhận\n\n";
         $msg .= "📦 <b>Sản phẩm:</b> {$product['name']} x {$order['quantity']}\n";
         $msg .= " <b>Số tiền:</b> " . number_format($order['total_price'], 0, ',', '.') . " VND\n\n";
+        $msg .= "📋 <b>Mã giao dịch:</b> <code>{$order['transaction_code']}</code>\n";
+        $msg .= "⏰ " . date('d/m/Y H:i', strtotime($order['created_at'])) . "\n";
+        $msg .= "━━━━━━━━━━━━━━━━━━━\n";
         // Add custom message if exists
         if (!empty($product['custom_message'])) {
             $msg .= $product['custom_message'] . "\n\n";
@@ -137,6 +125,7 @@ class DeliveryTemplate {
             $msg .= "🔗 Đăng nhập tại: {$product['login_url']}\n\n";
         }
         
+        $msg .= "━━━━━━━━━━━━━━━━━━━\n";
         $msg .= "🔑 <b>Vui lòng xem tài khoản trong file .txt phía dưới</b>\n\n";
         $msg .= "Cảm ơn bạn đã mua hàng! 🙏";
         
@@ -148,10 +137,10 @@ class DeliveryTemplate {
      */
     private static function renderQRStyle1($order, $product, $accounts) {
         $msg = "🎉 <b>THANH TOÁN THÀNH CÔNG!</b>\n\n";
-        $msg .= "✅ Đơn hàng #{$order['id']} đã được xác nhận\n\n";
-        $msg .= "━━━━━━━━━━━━━━━━━━━\n";
         $msg .= "📦 <b>Sản phẩm:</b> {$product['name']} x {$order['quantity']}\n";
         $msg .= "💰 <b>Số tiền:</b> " . number_format($order['total_price'], 0, ',', '.') . " VND\n";
+        $msg .= "📋 <b>Mã giao dịch:</b> <code>{$order['transaction_code']}</code>\n";
+        $msg .= "⏰ " . date('d/m/Y H:i', strtotime($order['created_at'])) . "\n";
         $msg .= "━━━━━━━━━━━━━━━━━━━\n\n";
         
         // Add login URL if exists
@@ -175,10 +164,10 @@ class DeliveryTemplate {
      */
     private static function renderWalletStyle2($order, $product, $accounts, $newBalance) {
         $msg = "✅ <b>THANH TOÁN THÀNH CÔNG!</b>\n\n";
-        $msg .= "📋 <b>Mã giao dịch:</b> <code>{$order['transaction_code']}</code>\n";
         $msg .= "📦 <b>Sản phẩm:</b> {$product['name']} x {$order['quantity']}\n";
         $msg .= "💰 <b>Số tiền:</b> " . number_format($order['total_price'], 0, ',', '.') . " VNĐ\n";
         $msg .= "💳 <b>Số dư còn lại:</b> " . number_format($newBalance, 0, ',', '.') . " VNĐ\n\n";
+        $msg .= "📋 <b>Mã giao dịch:</b> <code>{$order['transaction_code']}</code>\n";
         $msg .= "⏰ " . date('d/m/Y H:i', strtotime($order['created_at'])) . "\n";
         $msg .= "━━━━━━━━━━━━━━━━━━━\n";
         
@@ -210,10 +199,10 @@ class DeliveryTemplate {
      */
     private static function renderQRStyle2($order, $product, $accounts) {
         $msg = "🎉 <b>THANH TOÁN THÀNH CÔNG!</b>\n\n";
-        $msg .= "✅ Đơn hàng #{$order['id']} đã được xác nhận\n\n";
-        $msg .= "━━━━━━━━━━━━━━━━━━━\n";
         $msg .= "📦 <b>Sản phẩm:</b> {$product['name']} x {$order['quantity']}\n";
         $msg .= "💰 <b>Số tiền:</b> " . number_format($order['total_price'], 0, ',', '.') . " VND\n";
+        $msg .= "📋 <b>Mã giao dịch:</b> <code>{$order['transaction_code']}</code>\n";
+        $msg .= "⏰ " . date('d/m/Y H:i', strtotime($order['created_at'])) . "\n";
         $msg .= "━━━━━━━━━━━━━━━━━━━\n\n";
         
         // Add 2FA instruction if exists
