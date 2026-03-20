@@ -105,22 +105,22 @@ function handleWalletPayment($bot, $chatId, $userId, $productId, $quantity, $pdo
         $pdo->commit();
         
         // Prepare account data for template
-        $accountsData = [];
-        foreach ($accounts as $account) {
-            $parts = preg_split('/\s+/', $account['account_data']);
+        // $accountsData = [];
+        // foreach ($accounts as $account) {
+        //     $parts = preg_split('/\s+/', $account['account_data']);
             
-            $accountData = [
-                'username' => trim($parts[0] ?? ''),
-                'password' => trim($parts[1] ?? '')
-            ];
+        //     $accountData = [
+        //         'username' => trim($parts[0] ?? ''),
+        //         'password' => trim($parts[1] ?? '')
+        //     ];
             
-            // Add 2FA if exists
-            if (isset($parts[2]) && !empty(trim($parts[2]))) {
-                $accountData['twofa'] = trim($parts[2]);
-            }
+        //     // Add 2FA if exists
+        //     if (isset($parts[2]) && !empty(trim($parts[2]))) {
+        //         $accountData['twofa'] = trim($parts[2]);
+        //     }
             
-            $accountsData[] = $accountData;
-        }
+        //     $accountsData[] = $accountData;
+        // }
         
         // Get order data for template
         $orderData = [
@@ -133,13 +133,13 @@ function handleWalletPayment($bot, $chatId, $userId, $productId, $quantity, $pdo
         
         // Use DeliveryTemplate to format message
         require_once __DIR__ . '/templates/DeliveryTemplate.php';
-        $msg = DeliveryTemplate::renderWalletSuccess($orderData, $product, $accountsData, $result['new_balance']);
+        $msg = DeliveryTemplate::renderWalletSuccess($orderData, $product, $accounts, $result['new_balance']);
         
         $bot->editMessage($chatId, $messageId, $msg);
 
         // Gửi file .txt chứa thông tin tài khoản
         require_once __DIR__ . '/../includes/telegram.php';
-        sendAccountFileTelegram($bot, $chatId, $orderId, $product['name'], $quantity, $accountsData);
+        sendAccountFileTelegram($bot, $chatId, $orderId, $product['name'], $quantity, $accounts);
 
         // Send message to admin
         $msg = "<b>Đã thanh toán cho đơn hàng #{$orderId}</b>";

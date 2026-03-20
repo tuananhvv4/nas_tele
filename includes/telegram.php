@@ -101,49 +101,49 @@ class TelegramNotifier {
             }
             
             // Parse all account data
-            $accountsData = [];
-            foreach ($accountRecords as $record) {
-                $accountData = $record['account_data'];
+            // $accountsData = [];
+            // foreach ($accountRecords as $record) {
+            //     $accountData = $record['account_data'];
                 
-                // Try to parse as JSON first
-                $parsed = json_decode($accountData, true);
-                if (json_last_error() === JSON_ERROR_NONE && is_array($parsed)) {
-                    // Valid JSON
-                    $accountsData[] = $parsed;
-                } else {
-                    // Plain text - parse with 2FA support
-                    // Split by space (handles all formats: user pass, user|pass, user:pass)
-                    $parts = preg_split('/\s+/', $accountData);
+            //     // Try to parse as JSON first
+            //     $parsed = json_decode($accountData, true);
+            //     if (json_last_error() === JSON_ERROR_NONE && is_array($parsed)) {
+            //         // Valid JSON
+            //         $accountsData[] = $parsed;
+            //     } else {
+            //         // Plain text - parse with 2FA support
+            //         // Split by space (handles all formats: user pass, user|pass, user:pass)
+            //         $parts = preg_split('/\s+/', $accountData);
                     
-                    $account = [
-                        'username' => trim($parts[0] ?? ''),
-                        'password' => trim($parts[1] ?? '')
-                    ];
+            //         $account = [
+            //             'username' => trim($parts[0] ?? ''),
+            //             'password' => trim($parts[1] ?? '')
+            //         ];
                     
-                    // Check if 2FA exists (3rd part)
-                    if (isset($parts[2]) && !empty(trim($parts[2]))) {
-                        $account['twofa'] = trim($parts[2]);
-                    }
+            //         // Check if 2FA exists (3rd part)
+            //         if (isset($parts[2]) && !empty(trim($parts[2]))) {
+            //             $account['twofa'] = trim($parts[2]);
+            //         }
                     
-                    $accountsData[] = $account;
-                }
-            }
+            //         $accountsData[] = $account;
+            //     }
+            // }
             
-            // Fallback: if no accounts found, log error
-            if (empty($accountsData)) {
-                error_log("WARNING: No accounts found for Order #{$order['id']}, Product #{$orderData['product_id']}, Quantity: " . ($orderData['quantity'] ?? 1));
-                return false;
-            }
+            // // Fallback: if no accounts found, log error
+            // if (empty($accountsData)) {
+            //     error_log("WARNING: No accounts found for Order #{$order['id']}, Product #{$orderData['product_id']}, Quantity: " . ($orderData['quantity'] ?? 1));
+            //     return false;
+            // }
             
             // Use DeliveryTemplate to format message
             require_once __DIR__ . '/../bot/templates/DeliveryTemplate.php';
-            $message = DeliveryTemplate::renderQRSuccess($orderData, $product, $accountsData);
+            $message = DeliveryTemplate::renderQRSuccess($orderData, $product, $accountRecords);
             
             // Create keyboard
             $keyboard = [
                 'inline_keyboard' => [
                     [
-                        ['text' => '🛍️ Mua tiếp', 'callback_data' => 'show_products'],
+                        ['text' => '🛍️ Mua tiếp', 'callback_data' => 'mua'],
                         ['text' => '📋 Đơn hàng', 'callback_data' => 'my_orders']
                     ],
                     [
@@ -184,7 +184,7 @@ class TelegramNotifier {
             $this->bot->sendMessage($chatId, $message, $options);
 
             // Gửi file .txt chứa thông tin tài khoản
-            $this->sendAccountFile($chatId, $orderData, $product, $accountsData);
+            $this->sendAccountFile($chatId, $orderData, $product, $accountRecords);
 
             error_log("Account sent to user: Order #{$order['id']}, Telegram ID: {$chatId}");
             return true;

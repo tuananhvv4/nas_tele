@@ -53,58 +53,58 @@ try {
     error_log("Bot settings table error: " . $e->getMessage());
 }
 
-// Get bot token from database or use constant
+// Lấy bot token từ database hoặc sử dụng constant
 try {
     $botData = $pdo->query("SELECT * FROM bots WHERE is_configured = 1 AND status = 'active' LIMIT 1")->fetch();
     
-    // Fallback to constant if no bot in database
+    // Fallback to constant nếu không có bot trong database
     if (!$botData && defined('BOT_TOKEN')) {
         $botToken = BOT_TOKEN;
     } elseif ($botData) {
         $botToken = $botData['bot_token'];
     } else {
-        // No token available
+        // Không có token khả dụng
         http_response_code(200);
-        exit(json_encode(['ok' => false, 'error' => 'Bot not configured']));
+        exit(json_encode(['ok' => false, 'error' => 'Bot không được cấu hình']));
     }
 } catch (PDOException $e) {
-    // Database error, try constant
+    // Lỗi database, thử constant
     if (defined('BOT_TOKEN')) {
         $botToken = BOT_TOKEN;
     } else {
         http_response_code(200);
         error_log("Database error and no BOT_TOKEN constant: " . $e->getMessage());
-        exit(json_encode(['ok' => false, 'error' => 'Bot configuration error']));
+        exit(json_encode(['ok' => false, 'error' => 'Lỗi cấu hình bot']));
     }
 }
 
 $bot = new TelegramBot($botToken);
 
-// Get webhook update
+// Lấy update từ webhook
 $input = file_get_contents('php://input');
 $update = json_decode($input, true);
 
 if (!$update) {
     http_response_code(200);
-    exit(json_encode(['ok' => true, 'message' => 'No update']));
+    exit(json_encode(['ok' => true, 'message' => 'Không có update']));
 }
 
-// Log update for debugging (optional, comment out in production)
+// Log update cho debugging (tùy chọn, bỏ comment trong production)
 // error_log("Webhook update: " . json_encode($update));
 
-// Wrap everything in try-catch
+// Bao bọc mọi thứ trong try-catch
 try {
-    // Check maintenance mode
+    // Kiểm tra maintenance mode
     if (isMaintenanceMode($pdo)) {
         if (isset($update['message'])) {
             $chatId = $update['message']['chat']['id'];
             $bot->sendMessage($chatId, getMaintenanceMessage($pdo));
         }
         http_response_code(200);
-        exit(json_encode(['ok' => true, 'message' => 'Maintenance mode']));
+        exit(json_encode(['ok' => true, 'message' => 'Bot đang bảo trì, vui lòng quay lại sau!']));
     }
 
-    // Handle message
+    // Xử lý message
     if (isset($update['message'])) {
         $message = $update['message'];
         $chatId = $message['chat']['id'];
@@ -112,7 +112,7 @@ try {
         $userId = $message['from']['id'];
         $username = $message['from']['username'] ?? $message['from']['first_name'] ?? 'User';
 
-        // Save/update user
+        // Lưu/cập nhật user
         $stmt = $pdo->prepare("
             INSERT INTO users (telegram_id, username, email, role) 
             VALUES (?, ?, ?, 'user')
@@ -121,43 +121,43 @@ try {
         $email = $userId . '@telegram.bot';
         $stmt->execute([$userId, $username, $email, $username, $email]);
 
-        // Handle commands
+        // Xử lý lệnh
         if ($text === '/start') {
             handleStartCommand($bot, $chatId, $pdo, null, $username);
         } elseif ($text === '/mua') {
             handleProductsCommand($bot, $chatId, $pdo);
         } elseif ($text === '/hdsd' || $text === '/help') {
-            // User guide
+            // Hướng dẫn sử dụng
             handleUserGuide($bot, $chatId, $pdo);
         } elseif (strpos($text, '/promo ') === 0) {
-            // Handle promo code activation
+            // Xử lý kích hoạt mã khuyến mãi
             $code = strtoupper(trim(substr($text, 7))); // Remove "/promo "
             error_log("DEBUG: Promo command matched - code='$code'");
             handlePromoActivation($bot, $chatId, $userId, $code, $pdo, $username);
         } elseif ($text === '/sodu' || $text === '/wallet') {
-            // Check wallet balance
+            // Kiểm tra số dư ví
             handleSoDu($bot, $chatId, $userId, $pdo);
         } elseif ($text === '/naptien' || $text === '/topup') {
-            // Wallet top-up
+            // Nạp tiền vào ví
             handleNapTien($bot, $chatId, $userId, $pdo);
         } elseif (is_numeric($text) && intval($text) > 0) {
-            // Check if user sent a number - treat as custom top-up amount
+            // Kiểm tra nếu user gửi một số - xử lý như là số tiền nạp tùy chỉnh
             $amount = intval($text);
             
-            // Validate amount
+            // Kiểm tra số tiền
             if ($amount < 10000) {
                 $bot->sendMessage($chatId, "❌ Số tiền tối thiểu là 10,000 VND!");
             } elseif ($amount > 50000000) {
                 $bot->sendMessage($chatId, "❌ Số tiền tối đa là 50,000,000 VND!");
             } else {
-                // Valid amount - create top-up request
+                // Số tiền hợp lệ - tạo yêu cầu nạp tiền
                 error_log("DEBUG: Custom amount from text - amount=$amount, user=$userId");
                 handleTopupRequest($bot, $chatId, $userId, $amount, $pdo, null);
             }
         }
     }
 
-// Handle callback query
+// Xử lý callback query
 if (isset($update['callback_query'])) {
     $callbackQuery = $update['callback_query'];
     $chatId = $callbackQuery['message']['chat']['id'];
@@ -166,7 +166,7 @@ if (isset($update['callback_query'])) {
     $userId = $callbackQuery['from']['id'];
     $callbackAnswered = false;
 
-    // Route callbacks
+    // Định tuyến callback
     if ($data === 'start') {
         handleStartCommand($bot, $chatId, $pdo, $messageId);
     } elseif ($data === 'show_products') {
@@ -188,7 +188,7 @@ if (isset($update['callback_query'])) {
         list(, $productId, $quantity) = explode('_', $data);
         handleQuantitySelection($bot, $chatId, intval($productId), $pdo, $messageId, intval($quantity));
     } elseif (strpos($data, 'confirm_buy_') === 0) {
-        // Skip confirmation screen - create order directly
+        // Bỏ qua màn hình xác nhận - tạo đơn hàng trực tiếp
         list(, , $productId, $quantity) = explode('_', $data);
         handleCreateOrder($bot, $chatId, $userId, intval($productId), intval($quantity), $pdo, $messageId);
     } elseif (strpos($data, 'create_order_') === 0) {
@@ -197,7 +197,7 @@ if (isset($update['callback_query'])) {
     } elseif ($data === 'my_orders') {
         handleMyOrders($bot, $chatId, $userId, $pdo, $messageId);
     } elseif ($data === 'user_guide') {
-        // Delete old message and send guide
+        // Xóa tin nhắn cũ và gửi hướng dẫn
         $bot->deleteMessage($chatId, $messageId);
         handleUserGuide($bot, $chatId, $pdo);
     } elseif (strpos($data, 'order_detail_') === 0) {
@@ -213,30 +213,30 @@ if (isset($update['callback_query'])) {
         $orderId = intval(str_replace('cancel_order_', '', $data));
         handleCancelOrder($bot, $chatId, $orderId, $pdo, $messageId);
     } elseif ($data === 'cancel_order') {
-        // Cancel order from payment selection
+        // Hủy đơn hàng từ màn hình thanh toán
         $bot->deleteMessage($chatId, $messageId);
         $bot->sendMessage($chatId, "❌ Đơn hàng đã bị hủy.");
     } elseif (strpos($data, 'pay_wallet_') === 0) {
-        // Wallet payment
+        // Thanh toán bằng ví
         list(, , $productId, $quantity) = explode('_', $data);
         handleWalletPayment($bot, $chatId, $userId, intval($productId), intval($quantity), $pdo, $messageId);
     } elseif (strpos($data, 'pay_qr_') === 0) {
-        // QR payment
+        // Thanh toán bằng QR Code
         list(, , $productId, $quantity) = explode('_', $data);
         handleQRPayment($bot, $chatId, $userId, intval($productId), intval($quantity), $pdo, $messageId);
     } elseif (strpos($data, 'pay_mixed_') === 0) {
-        // Mixed payment
+        // Thanh toán kết hợp (Ví + QR)
         list(, , $productId, $quantity) = explode('_', $data);
         handleMixedPayment($bot, $chatId, $userId, intval($productId), intval($quantity), $pdo, $messageId);
     } elseif ($data === 'topup_wallet') {
-        // Wallet top-up from main menu - CHECK BEFORE topup_ pattern!
+        // Nạp tiền vào ví từ menu chính - CHECK BEFORE topup_ pattern!
         error_log("DEBUG: topup_wallet callback triggered for user $userId");
         handleNapTien($bot, $chatId, $userId, $pdo);
     } elseif ($data === 'topup_custom') {
-        // Custom amount input - CHECK BEFORE topup_ pattern!
+        // Nhập số tiền tùy chỉnh - CHECK BEFORE topup_ pattern!
         handleCustomTopup($bot, $chatId, $messageId, $pdo);
     } elseif (strpos($data, 'topup_') === 0) {
-        // Wallet top-up with specific amount (e.g., topup_50000)
+        // Nạp tiền vào ví với số tiền cụ thể (ví dụ: topup_50000)
         $amount = intval(str_replace('topup_', '', $data));
         error_log("DEBUG: topup amount callback - amount=$amount from data=$data");
         handleTopupRequest($bot, $chatId, $userId, $amount, $pdo, $messageId);
@@ -244,63 +244,63 @@ if (isset($update['callback_query'])) {
         $bot->deleteMessage($chatId, $messageId);
         $bot->sendMessage($chatId, "❌ Nạp tiền đã bị hủy.");
     } elseif (strpos($data, 'cancel_topup_') === 0) {
-        // Cancel specific topup request
+        // Hủy yêu cầu nạp tiền cụ thể
         $bot->deleteMessage($chatId, $messageId);
         $bot->sendMessage($chatId, "❌ Nạp tiền đã bị hủy.");
     } elseif ($data === 'support') {
-        // Support info
+        // Thông tin hỗ trợ
         handleSupport($bot, $chatId, $pdo, $messageId);
     }
 
-    // Answer callback query (nếu chưa được answer thủ công ở trên)
+    // Trả lời callback query (nếu chưa được trả lời thủ công ở trên)
     if (!$callbackAnswered) {
         $bot->answerCallbackQuery($callbackQuery['id']);
     }
 }
 
-    // Success response
+    // Trả lời thành công
     http_response_code(200);
     echo json_encode(['ok' => true]);
     
 } catch (Exception $e) {
-    // Log error
+    // Log lỗi
     error_log("Webhook error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
     
-    // Return success to Telegram anyway (to avoid retries)
+    // Trả lời thành công cho Telegram (để tránh retries)
     http_response_code(200);
     echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
 }
 
 exit;
 
-// ==================== HANDLER FUNCTIONS ====================
+// ==================== HÀM XỬ LÝ ====================
 
 /**
- * Helper: Send or edit message (safer than delete)
+ * Hỗ trợ: Gửi hoặc chỉnh sửa tin nhắn (an toàn hơn việc xóa)
  */
 function sendWithCleanup($bot, $chatId, $message, $keyboard = null, $oldMessageId = null) {
-    // Prepare options
+    // Chuẩn bị các tùy chọn
     $options = ['parse_mode' => 'HTML'];
     if ($keyboard) {
         $options['keyboard'] = $keyboard;
     }
     
     if ($oldMessageId) {
-        // Try to edit existing message first
+        // Thử chỉnh sửa tin nhắn cũ trước
         try {
             return $bot->editMessage($chatId, $oldMessageId, $message, $keyboard);
         } catch (Exception $e) {
-            // If edit fails (message deleted/too old), send new
+            // Nếu chỉnh sửa thất bại (tin nhắn đã bị xóa/quá cũ), gửi tin nhắn mới
             return $bot->sendMessage($chatId, $message, $options);
         }
     } else {
-        // Send new message
+        // Gửi tin nhắn mới
         return $bot->sendMessage($chatId, $message, $options);
     }
 }
 
 /**
- * Helper: Send message with keyboard
+ * Hỗ trợ: Gửi tin nhắn với bàn phím
  */
 function sendMessageWithKeyboard($bot, $chatId, $message, $keyboard = null) {
     $options = ['parse_mode' => 'HTML'];
@@ -311,17 +311,17 @@ function sendMessageWithKeyboard($bot, $chatId, $message, $keyboard = null) {
 }
 
 /**
- * Helper: Edit message with keyboard
+ * Hỗ trợ: Chỉnh sửa tin nhắn với bàn phím
  */
 function editMessageWithKeyboard($bot, $chatId, $messageId, $message, $keyboard = null) {
     return $bot->editMessage($chatId, $messageId, $message, $keyboard);
 }
 
 /**
- * Handle /start command
+ * Xử lý lệnh /start
  */
 function handleStartCommand($bot, $chatId, $pdo, $messageId = null, $username = null) {
-    // Get bot settings with error handling
+    // Lấy cấu hình bot với xử lý lỗi
     try {
         $settings = $pdo->query("SELECT * FROM bot_settings WHERE id = 1")->fetch();
     } catch (PDOException $e) {
@@ -332,8 +332,8 @@ function handleStartCommand($bot, $chatId, $pdo, $messageId = null, $username = 
     $welcomeStyle = $settings['welcome_style'] ?? 'modern';
     $customMessage = $settings['welcome_message'] ?? null;
     
-    // IMPORTANT: Ensure user exists in database first
-    // This is critical for promo codes and other features
+    // QUAN TRỌNG: Đảm bảo user tồn tại trong database trước
+    // Điều này quan trọng cho mã khuyến mãi và các tính năng khác
     try {
         $stmt = $pdo->prepare("
             INSERT INTO users (telegram_id, username, email, role) 
@@ -342,7 +342,7 @@ function handleStartCommand($bot, $chatId, $pdo, $messageId = null, $username = 
                 username = VALUES(username),
                 email = VALUES(email)
         ");
-        // Use provided username or fallback
+        // Sử dụng username cung cấp hoặc fallback
         if (!$username) {
             $username = 'user_' . $chatId;
         }
@@ -352,16 +352,16 @@ function handleStartCommand($bot, $chatId, $pdo, $messageId = null, $username = 
         error_log("Error saving user in /start: " . $e->getMessage());
     }
     
-    // Get user wallet balance
+    // Lấy số dư ví của user
     $stmt = $pdo->prepare("SELECT id, wallet_balance FROM users WHERE telegram_id = ?");
     $stmt->execute([$chatId]);
     $user = $stmt->fetch();
     $walletBalance = $user ? floatval($user['wallet_balance']) : 0;
     
-    // Render welcome message
+    // Render tin nhắn chào mừng
     $message = WelcomeTemplate::render($welcomeStyle, $botName, $customMessage);
     
-    // Add wallet balance info
+    // Thêm thông tin số dư ví
     $message .= "\n\n💰 <b>Số dư ví:</b> " . formatVND($walletBalance);
     
     $keyboard = WelcomeTemplate::getKeyboard($welcomeStyle);
@@ -370,10 +370,10 @@ function handleStartCommand($bot, $chatId, $pdo, $messageId = null, $username = 
 }
 
 /**
- * Handle products list
+ * Xử lý danh sách sản phẩm
  */
 function handleProductsCommand($bot, $chatId, $pdo, $messageId = null, $page = 1) {
-    // Get settings with error handling
+    // Lấy cấu hình với xử lý lỗi
     try {
         $settings = $pdo->query("SELECT * FROM bot_settings WHERE id = 1")->fetch();
         $itemsPerPage = $settings['items_per_page'] ?? 10;
@@ -381,11 +381,11 @@ function handleProductsCommand($bot, $chatId, $pdo, $messageId = null, $page = 1
         $itemsPerPage = 10;
     }
     
-    // Get total products
+    // Lấy tổng số sản phẩm
     $total = $pdo->query("SELECT COUNT(*) FROM products WHERE status = 'active'")->fetchColumn();
     $totalPages = ceil($total / $itemsPerPage);
     
-    // Get products for current page
+    // Lấy sản phẩm cho trang hiện tại
     $offset = ($page - 1) * $itemsPerPage;
     $stmt = $pdo->prepare("
         SELECT p.*, COUNT(CASE WHEN pa.is_sold = 0 THEN 1 END) as stock
@@ -399,17 +399,17 @@ function handleProductsCommand($bot, $chatId, $pdo, $messageId = null, $page = 1
     $stmt->execute([$itemsPerPage, $offset]);
     $products = $stmt->fetchAll();
     
-    // Render product list
+    // Render danh sách sản phẩm
     $result = ProductTemplate::renderList($products, $page, $totalPages);
     
     sendWithCleanup($bot, $chatId, $result['message'], $result['keyboard'], $messageId);
 }
 
 /**
- * Handle product detail
+ * Xử lý chi tiết sản phẩm
  */
 function handleProductDetail($bot, $chatId, $productId, $pdo, $messageId) {
-    // Get product with stock
+    // Lấy sản phẩm với số lượng
     $stmt = $pdo->prepare("
         SELECT p.*, COUNT(CASE WHEN pa.is_sold = 0 THEN 1 END) as stock
         FROM products p
@@ -425,16 +425,16 @@ function handleProductDetail($bot, $chatId, $productId, $pdo, $messageId) {
         return;
     }
     
-    // Render product detail
+    // Render chi tiết sản phẩm
     $result = ProductTemplate::renderDetail($product);
     sendWithCleanup($bot, $chatId, $result['message'], $result['keyboard'], $messageId);
 }
 
 /**
- * Handle quantity selection
+ * Xử lý chọn số lượng
  */
 function handleQuantitySelection($bot, $chatId, $productId, $pdo, $messageId, $selectedQty = 1) {
-    // Get product
+    // Lấy sản phẩm
     $stmt = $pdo->prepare("
         SELECT p.*, COUNT(CASE WHEN pa.is_sold = 0 THEN 1 END) as stock
         FROM products p
@@ -452,16 +452,16 @@ function handleQuantitySelection($bot, $chatId, $productId, $pdo, $messageId, $s
     
     $selectedQty = max(1, min($selectedQty, $product['stock']));
 
-    // Render quantity selector
+    // Render chọn số lượng
     $result = ProductTemplate::renderQuantitySelector($product, $selectedQty);
     sendWithCleanup($bot, $chatId, $result['message'], $result['keyboard'], $messageId);
 }
 
 /**
- * Handle order confirmation
+ * Xử lý xác nhận đơn hàng
  */
 function handleOrderConfirmation($bot, $chatId, $productId, $quantity, $pdo, $messageId) {
-    // Get product
+    // Lấy sản phẩm
     $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ?");
     $stmt->execute([$productId]);
     $product = $stmt->fetch();
@@ -470,19 +470,19 @@ function handleOrderConfirmation($bot, $chatId, $productId, $quantity, $pdo, $me
         return;
     }
     
-    // Render confirmation
+    // Render xác nhận
     $result = PaymentTemplate::renderConfirmation($product, $quantity);
     $bot->editMessage($chatId, $messageId, $result['message'], $result['keyboard']);
 }
 
 /**
- * Handle create order
+ * Xử lý tạo đơn hàng
  */
 function handleCreateOrder($bot, $chatId, $userId, $productId, $quantity, $pdo, $messageId) {
     try {
         $pdo->beginTransaction();
         
-        // Get product
+        // Lấy sản phẩm
         $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ? FOR UPDATE");
         $stmt->execute([$productId]);
         $product = $stmt->fetch();
@@ -491,7 +491,7 @@ function handleCreateOrder($bot, $chatId, $userId, $productId, $quantity, $pdo, 
             throw new Exception("Sản phẩm không tồn tại!");
         }
         
-        // Check stock
+        // Kiểm tra số lượng
         $stmt = $pdo->prepare("
             SELECT COUNT(*) FROM product_accounts 
             WHERE product_id = ? AND is_sold = 0
@@ -504,17 +504,17 @@ function handleCreateOrder($bot, $chatId, $userId, $productId, $quantity, $pdo, 
         }
         
         
-        // Get or create user
+        // Lấy hoặc tạo user
         $stmt = $pdo->prepare("SELECT id, username, wallet_balance FROM users WHERE telegram_id = ?");
         $stmt->execute([$userId]);
         $user = $stmt->fetch();
         
         if (!$user) {
-            // User doesn't exist, create new user
+            // User không tồn tại, tạo user mới
             $telegramUsername = $update['message']['from']['username'] ?? null;
             $firstName = $update['message']['from']['first_name'] ?? 'User';
             
-            // Generate unique username and email for database
+            // Tạo username và email duy nhất cho database
             $username = $telegramUsername ?: 'user_' . $userId;
             $email = $userId . '@telegram.user'; // Fake email for Telegram users
             $passwordHash = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT); // Random password
@@ -535,13 +535,13 @@ function handleCreateOrder($bot, $chatId, $userId, $productId, $quantity, $pdo, 
         }
         
         
-        // Calculate total (prices are already in VND)
+        // Tính tổng (giá đã được tính bằng VND)
         $totalPrice = $product['price'] * $quantity;
         $walletBalance = floatval($user['wallet_balance']);
         
         $pdo->commit();
         
-        // Show payment method selection
+        // Hiển thị lựa chọn phương thức thanh toán
         $msg = "🛒 <b>XÁC NHẬN ĐƠN HÀNG</b>\n\n";
         $msg .= "📦 Sản phẩm: <b>" . htmlspecialchars($product['name']) . "</b>\n";
         $msg .= "🔢 Số lượng: <b>$quantity</b>\n";
@@ -552,19 +552,19 @@ function handleCreateOrder($bot, $chatId, $userId, $productId, $quantity, $pdo, 
         
         $keyboard = [];
         
-        // Wallet payment option (if sufficient balance)
+        // Lựa chọn thanh toán bằng ví (nếu đủ số dư)
         if ($walletBalance >= $totalPrice) {
             $keyboard[] = [
                 ['text' => '💰 Thanh toán bằng Ví', 'callback_data' => "pay_wallet_{$productId}_{$quantity}"]
             ];
         }
         
-        // QR payment option (always available)
+        // Lựa chọn thanh toán bằng QR Code (luôn có sẵn)
         $keyboard[] = [
             ['text' => '📱 Thanh toán QR Code', 'callback_data' => "pay_qr_{$productId}_{$quantity}"]
         ];
         
-        // Mixed payment option (if wallet has some balance but not enough)
+        // Lựa chọn thanh toán kết hợp (Ví + QR) (nếu ví có số dư nhưng không đủ)
         if ($walletBalance > 0 && $walletBalance < $totalPrice) {
             $remaining = $totalPrice - $walletBalance;
             $keyboard[] = [
@@ -576,7 +576,7 @@ function handleCreateOrder($bot, $chatId, $userId, $productId, $quantity, $pdo, 
             ['text' => '❌ Hủy', 'callback_data' => 'cancel_order']
         ];
         
-        // Delete quantity selector message if exists
+        // Xóa tin nhắn chọn số lượng nếu tồn tại
         if ($messageId) {
             $bot->deleteMessage($chatId, $messageId);
         }
@@ -590,10 +590,10 @@ function handleCreateOrder($bot, $chatId, $userId, $productId, $quantity, $pdo, 
 }
 
 /**
- * Handle show QR code
+ * Xử lý hiển thị QR Code
  */
 function handleShowQR($bot, $chatId, $orderId, $pdo, $messageId = null, $isNew = false) {
-    // Get order
+    // Lấy đơn hàng
     $stmt = $pdo->prepare("
         SELECT o.*, p.name as product_name
         FROM orders o
@@ -608,14 +608,14 @@ function handleShowQR($bot, $chatId, $orderId, $pdo, $messageId = null, $isNew =
         return;
     }
     
-    // Get payment settings
+    // Lấy cấu hình thanh toán
     $paymentSettings = $pdo->query("SELECT * FROM payment_settings WHERE id = 1")->fetch();
     
-    // Render QR payment
+    // Render thanh toán QR Code
     $result = PaymentTemplate::renderQR($order, $order['qr_code_url'], $paymentSettings);
     
     if ($isNew || !$messageId) {
-        // Delete quantity selector message if exists
+        // Xóa tin nhắn chọn số lượng nếu tồn tại
         if (!empty($order['quantity_message_id'])) {
             try {
                 $bot->deleteMessage($chatId, $order['quantity_message_id']);
@@ -625,15 +625,15 @@ function handleShowQR($bot, $chatId, $orderId, $pdo, $messageId = null, $isNew =
             }
         }
         
-        // Send QR image ONLY (no caption) - like user's screenshot
+        // Gửi hình ảnh QR Code ONLY (không có caption) - giống như ảnh chụp màn hình của user
         $qrResponse = $bot->sendPhoto($chatId, $result['qr_url'], '');
         $qrMessageId = $qrResponse['result']['message_id'] ?? null;
         
-        // Then send payment info with keyboard
+        // Sau đó gửi thông tin thanh toán với bàn phím
         $paymentResponse = sendMessageWithKeyboard($bot, $chatId, $result['message'], $result['keyboard']);
         $paymentMessageId = $paymentResponse['result']['message_id'] ?? null;
         
-        // Save message IDs to database for later deletion
+        // Lưu ID tin nhắn vào database để xóa sau
         if ($qrMessageId && $paymentMessageId) {
             $stmt = $pdo->prepare("
                 UPDATE orders 
@@ -648,10 +648,10 @@ function handleShowQR($bot, $chatId, $orderId, $pdo, $messageId = null, $isNew =
 }
 
 /**
- * Handle my orders
+ * Xử lý danh sách đơn hàng của user
  */
 function handleMyOrders($bot, $chatId, $userId, $pdo, $messageId = null) {
-    // Get user
+    // Lấy user
     $stmt = $pdo->prepare("SELECT id FROM users WHERE telegram_id = ?");
     $stmt->execute([$userId]);
     $user = $stmt->fetch();
@@ -660,7 +660,7 @@ function handleMyOrders($bot, $chatId, $userId, $pdo, $messageId = null) {
         return;
     }
     
-    // Get orders
+    // Lấy đơn hàng
     $stmt = $pdo->prepare("
         SELECT o.*, p.name as product_name
         FROM orders o
@@ -672,7 +672,7 @@ function handleMyOrders($bot, $chatId, $userId, $pdo, $messageId = null) {
     $stmt->execute([$user['id']]);
     $orders = $stmt->fetchAll();
     
-    // Render order history
+    // Render lịch sử đơn hàng
     $result = OrderTemplate::renderHistory($orders);
     
     if ($messageId) {
@@ -683,10 +683,10 @@ function handleMyOrders($bot, $chatId, $userId, $pdo, $messageId = null) {
 }
 
 /**
- * Handle order detail
+ * Xử lý chi tiết đơn hàng
  */
 function handleOrderDetail($bot, $chatId, $orderId, $pdo, $messageId) {
-    // Get order
+    // Lấy đơn hàng
     $stmt = $pdo->prepare("
         SELECT o.*, p.name as product_name
         FROM orders o
@@ -700,22 +700,22 @@ function handleOrderDetail($bot, $chatId, $orderId, $pdo, $messageId) {
         return;
     }
 
-    // Lấy tất cả accounts theo order_id
+    // Lấy tất cả account theo order_id
     $accStmt = $pdo->prepare("SELECT account_data FROM product_accounts WHERE order_id = ? ORDER BY id ASC");
     $accStmt->execute([$orderId]);
     $accounts = $accStmt->fetchAll(PDO::FETCH_COLUMN);
     $order['account_data'] = !empty($accounts) ? implode("\n", $accounts) : '';
 
-    // Render order detail
+    // Render chi tiết đơn hàng
     $result = OrderTemplate::renderDetail($order);
     $bot->editMessage($chatId, $messageId, $result['message'], $result['keyboard']);
 }
 
 /**
- * Handle check payment (manual check)
+ * Xử lý kiểm tra thanh toán (kiểm tra thủ công)
  */
 function handleCheckPayment($bot, $chatId, $orderId, $pdo, $messageId) {
-    // Get order
+    // Lấy đơn hàng
     $stmt = $pdo->prepare("SELECT * FROM orders WHERE id = ?");
     $stmt->execute([$orderId]);
     $order = $stmt->fetch();
@@ -725,21 +725,21 @@ function handleCheckPayment($bot, $chatId, $orderId, $pdo, $messageId) {
     }
     
     if ($order['payment_status'] === 'completed') {
-        // Already paid
+        // Đã thanh toán
         $bot->answerCallbackQuery($callbackQuery['id'], "✅ Đơn hàng đã được thanh toán!", true);
         handleOrderDetail($bot, $chatId, $orderId, $pdo, $messageId);
     } else {
-        // Show pending message
+        // Hiển thị tin nhắn chờ thanh toán
         $result = PaymentTemplate::renderPending($order);
         $bot->editMessage($chatId, $messageId, $result['message'], $result['keyboard']);
     }
 }
 
 /**
- * Handle cancel order
+ * Xử lý hủy đơn hàng
  */
 function handleCancelOrder($bot, $chatId, $orderId, $pdo, $messageId) {
-    // Update order status
+    // Cập nhật trạng thái đơn hàng
     $stmt = $pdo->prepare("
         UPDATE orders 
         SET payment_status = 'cancelled' 
@@ -756,21 +756,21 @@ function handleCancelOrder($bot, $chatId, $orderId, $pdo, $messageId) {
 }
 
 /**
- * Handle promo code activation via /promo command
- * Credits wallet instead of activating discount session
+ * Xử lý kích hoạt mã khuyến mãi qua lệnh /promo
+ * Cộng tiền vào ví thay vì kích hoạt phiên giảm giá
  */
 function handlePromoActivation($bot, $chatId, $telegramId, $code, $pdo, $telegramUsername = null) {
     error_log("DEBUG: handlePromoActivation called - code=$code, chatId=$chatId, telegramId=$telegramId");
     
     try {
-        // Get user - if not exists, create it
+        // Lấy user - nếu không tồn tại, tạo nó
         $stmt = $pdo->prepare("SELECT id, wallet_balance, username FROM users WHERE telegram_id = ?");
         $stmt->execute([$telegramId]);
         $user = $stmt->fetch();
         
         if (!$user) {
             
-            // Create user with real Telegram username
+            // Tạo user với username thực tế của Telegram
             $username = $telegramUsername ?? 'user_' . $telegramId;
             $email = $telegramId . '@telegram.bot';
             $stmt = $pdo->prepare("
@@ -779,7 +779,7 @@ function handlePromoActivation($bot, $chatId, $telegramId, $code, $pdo, $telegra
             ");
             $stmt->execute([$telegramId, $username, $email]);
             
-            // Get the newly created user
+            // Lấy user mới đã tạo
             $stmt = $pdo->prepare("SELECT id, wallet_balance, username FROM users WHERE telegram_id = ?");
             $stmt->execute([$telegramId]);
             $user = $stmt->fetch();
@@ -793,7 +793,7 @@ function handlePromoActivation($bot, $chatId, $telegramId, $code, $pdo, $telegra
         $userId = $user['id'];
         $currentBalance = floatval($user['wallet_balance']);
         
-        // Get promo code
+        // Lấy mã khuyến mãi
         $stmt = $pdo->prepare("
             SELECT * FROM promo_codes 
             WHERE code = ? AND status = 'active'
@@ -806,7 +806,7 @@ function handlePromoActivation($bot, $chatId, $telegramId, $code, $pdo, $telegra
             return;
         }
         
-        // Check if code has reached max uses
+        // Kiểm tra nếu mã đã đạt đến số lần sử dụng tối đa
         $actualUses = $pdo->prepare("SELECT COUNT(*) FROM promo_code_usage WHERE promo_code_id = ?");
         $actualUses->execute([$promo['id']]);
         $usedCount = $actualUses->fetchColumn();
@@ -816,7 +816,7 @@ function handlePromoActivation($bot, $chatId, $telegramId, $code, $pdo, $telegra
             return;
         }
         
-        // Check if user already used this code
+        // Kiểm tra nếu user đã sử dụng mã này trước đó
         $stmt = $pdo->prepare("
             SELECT * FROM promo_code_usage 
             WHERE promo_code_id = ? AND user_id = ?
@@ -827,7 +827,7 @@ function handlePromoActivation($bot, $chatId, $telegramId, $code, $pdo, $telegra
             return;
         }
         
-        // Credit wallet
+        // Cộng tiền vào ví
         $creditAmount = floatval($promo['credit_amount']);
         
         $success = addToWallet(
@@ -845,7 +845,7 @@ function handlePromoActivation($bot, $chatId, $telegramId, $code, $pdo, $telegra
             return;
         }
         
-        // Record usage
+        // Ghi nhận sử dụng
         $stmt = $pdo->prepare("
             INSERT INTO promo_code_usage 
             (promo_code_id, user_id, telegram_id, credit_amount) 
@@ -853,21 +853,21 @@ function handlePromoActivation($bot, $chatId, $telegramId, $code, $pdo, $telegra
         ");
         $stmt->execute([$promo['id'], $userId, $telegramId, $creditAmount]);
         
-        // Update promo used_count
+        // Cập nhật số lần sử dụng mã khuyến mãi
         $pdo->prepare("UPDATE promo_codes SET used_count = used_count + 1 WHERE id = ?")
             ->execute([$promo['id']]);
         
-        // Get bot/shop name
+        // Lấy tên bot/shop
         $botSettings = $pdo->query("SELECT bot_name FROM bot_settings WHERE id = 1")->fetch();
         $shopName = $botSettings['bot_name'] ?? 'Shop';
         
-        // Get user info from database
+        // Lấy thông tin user từ database
         $stmt = $pdo->prepare("SELECT username FROM users WHERE id = ?");
         $stmt->execute([$userId]);
         $userDb = $stmt->fetch();
         $username = $userDb['username'] ?? 'User';
         
-        // Success message
+        // Tin nhắn thành công
         $newBalance = $currentBalance + $creditAmount;
         $msg = "✅ <b>NHẬP MÃ KHUYẾN MÃI THÀNH CÔNG!</b>\n\n";
         $msg .= "👤 User: <b>$username</b>\n";
@@ -889,10 +889,10 @@ function handlePromoActivation($bot, $chatId, $telegramId, $code, $pdo, $telegra
 }
 
 /**
- * Handle /naptien command - Wallet top-up
+ * Xử lý lệnh /naptien - Nạp tiền vào ví
  */
 function handleNapTien($bot, $chatId, $telegramId, $pdo) {
-    // Get current balance
+    // Lấy số dư hiện tại
     $stmt = $pdo->prepare("SELECT wallet_balance FROM users WHERE telegram_id = ?");
     $stmt->execute([$telegramId]);
     $user = $stmt->fetch();
@@ -928,7 +928,7 @@ function handleNapTien($bot, $chatId, $telegramId, $pdo) {
 }
 
 /**
- * Handle custom amount input for wallet top-up
+ * Xử lý nhập số tiền tùy chỉnh cho nạp tiền vào ví
  */
 function handleCustomTopup($bot, $chatId, $messageId, $pdo) {
     $msg = "💰 <b>NHẬP SỐ TIỀN TÙY CHỈNH</b>\n\n";
@@ -954,13 +954,13 @@ function handleCustomTopup($bot, $chatId, $messageId, $pdo) {
 }
 
 /**
- * Handle wallet top-up request
+ * Xử lý yêu cầu nạp tiền vào ví
  */
 function handleTopupRequest($bot, $chatId, $telegramId, $amount, $pdo, $messageId) {
     try {
         $pdo->beginTransaction();
         
-        // Get or create user
+        // Lấy hoặc tạo user
         $stmt = $pdo->prepare("SELECT id FROM users WHERE telegram_id = ?");
         $stmt->execute([$telegramId]);
         $user = $stmt->fetch();
@@ -969,13 +969,13 @@ function handleTopupRequest($bot, $chatId, $telegramId, $amount, $pdo, $messageI
             throw new Exception("User not found!");
         }
         
-        // Generate transaction code
+        // Tạo mã giao dịch
         $transactionCode = generateTransactionCode($pdo, 'TOPUP');
         
-        // Get payment settings
+        // Lấy cấu hình thanh toán
         $paymentSettings = $pdo->query("SELECT * FROM payment_settings WHERE id = 1")->fetch();
         
-        // Generate VietQR URL
+        // Tạo URL VietQR
         $qrUrl = generateVietQRUrl(
             $paymentSettings['bank_code'],
             $paymentSettings['account_number'],
@@ -984,7 +984,7 @@ function handleTopupRequest($bot, $chatId, $telegramId, $amount, $pdo, $messageI
             $paymentSettings['account_holder']
         );
         
-        // Create topup request
+        // Tạo yêu cầu nạp tiền
         $stmt = $pdo->prepare("
             INSERT INTO wallet_topup_requests (
                 user_id, telegram_id, amount, transaction_code, qr_code_url, payment_status
@@ -994,7 +994,7 @@ function handleTopupRequest($bot, $chatId, $telegramId, $amount, $pdo, $messageI
         
         $topupId = $pdo->lastInsertId();
         
-        // Add to payment check queue
+        // Thêm vào hàng đợi kiểm tra thanh toán
         $queueStmt = $pdo->prepare("
             INSERT INTO payment_check_queue (topup_id, transaction_code, amount, max_checks)
             VALUES (?, ?, ?, 40)
@@ -1003,7 +1003,7 @@ function handleTopupRequest($bot, $chatId, $telegramId, $amount, $pdo, $messageI
         
         $pdo->commit();
         
-        // Send QR code
+        // Gửi QR Code
         $msg = "💰 <b>NẠP TIỀN VÀO VÍ</b>\n\n";
         $msg .= "💵 Số tiền: <b>" . formatVND($amount) . "</b>\n";
         $msg .= "📋 Mã GD: <code>$transactionCode</code>\n\n";
@@ -1025,15 +1025,15 @@ function handleTopupRequest($bot, $chatId, $telegramId, $amount, $pdo, $messageI
             ]
         ];
         
-        // Send QR image and get message ID
+        // Gửi hình ảnh QR Code và lấy ID tin nhắn
         $qrResponse = $bot->sendPhoto($chatId, $qrUrl, "Quét mã QR để chuyển khoản");
         $qrMessageId = $qrResponse['result']['message_id'] ?? null;
         
-        // Send payment info and get message ID
+        // Gửi thông tin thanh toán và lấy ID tin nhắn
         $paymentResponse = $bot->sendMessage($chatId, $msg, ['reply_markup' => ['inline_keyboard' => $keyboard]]);
         $paymentMessageId = $paymentResponse['result']['message_id'] ?? null;
         
-        // Save message IDs to database
+        // Lưu ID tin nhắn vào database
         if ($qrMessageId || $paymentMessageId) {
             $stmt = $pdo->prepare("
                 UPDATE wallet_topup_requests 
@@ -1043,7 +1043,7 @@ function handleTopupRequest($bot, $chatId, $telegramId, $amount, $pdo, $messageI
             $stmt->execute([$qrMessageId, $paymentMessageId, $topupId]);
         }
         
-        // Delete the original message
+        // Xóa tin nhắn gốc
         if ($messageId) {
             $bot->deleteMessage($chatId, $messageId);
         }
@@ -1055,17 +1055,17 @@ function handleTopupRequest($bot, $chatId, $telegramId, $amount, $pdo, $messageI
 }
 
 /**
- * Handle /sodu command - Check wallet balance
+ * Xử lý lệnh /sodu - Kiểm tra số dư ví
  */
 function handleSoDu($bot, $chatId, $telegramId, $pdo) {
     try {
-        // Get user balance
+        // Lấy số dư ví của user
         $stmt = $pdo->prepare("SELECT wallet_balance FROM users WHERE telegram_id = ?");
         $stmt->execute([$telegramId]);
         $user = $stmt->fetch();
         
         if (!$user) {
-            // User not found, show 0 balance
+            // User không tồn tại, hiển thị số dư 0
             $msg = "💰 <b>SỐ DƯ VÍ</b>\n\n";
             $msg .= "💳 Số dư hiện tại: <b>" . formatVND(0) . "</b>\n\n";
             $msg .= "ℹ️ <i>Bạn chưa có giao dịch nào.</i>\n\n";
@@ -1076,7 +1076,7 @@ function handleSoDu($bot, $chatId, $telegramId, $pdo) {
         
         $balance = floatval($user['wallet_balance']);
         
-        // Get recent transactions
+        // Lấy giao dịch gần đây
         $stmt = $pdo->prepare("
             SELECT type, amount, description, created_at 
             FROM wallet_transactions 
@@ -1115,11 +1115,11 @@ function handleSoDu($bot, $chatId, $telegramId, $pdo) {
 }
 
 /**
- * Handle support - Show contact information
+ * Xử lý hỗ trợ - Hiển thị thông tin liên hệ
  */
 function handleSupport($bot, $chatId, $pdo, $messageId = null) {
     try {
-        // Get support settings
+        // Lấy cấu hình hỗ trợ
         $stmt = $pdo->query("SELECT bot_name, support_telegram, support_zalo, support_zalo_name FROM bot_settings WHERE id = 1");
         $settings = $stmt->fetch();
         
