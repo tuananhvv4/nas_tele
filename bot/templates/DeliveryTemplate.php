@@ -53,9 +53,9 @@ class DeliveryTemplate {
     private static function renderWalletDefault($order, $product, $accounts, $newBalance) {
         $msg = "✅ <b>THANH TOÁN THÀNH CÔNG!</b>\n\n";
         $msg .= "📦 <b>Sản phẩm:</b> {$product['name']} x {$order['quantity']}\n";
-        $msg .= "� <b>Số tiền:</b> " . number_format($order['total_price'], 0, ',', '.') . " VNĐ\n";
+        $msg .= "💰 <b>Số tiền:</b> " . number_format($order['total_price'], 0, ',', '.') . " VNĐ\n";
         $msg .= "💳 <b>Số dư còn lại:</b> " . number_format($newBalance, 0, ',', '.') . " VNĐ\n\n";
-        $msg .= "� <b>Mã giao dịch:</b> <code>{$order['transaction_code']}</code>\n";
+        $msg .= "📋 <b>Mã giao dịch:</b> <code>{$order['transaction_code']}</code>\n";
         $msg .= "⏰ " . date('d/m/Y H:i', strtotime($order['created_at'])) . "\n";
         $msg .= "━━━━━━━━━━━━━━━━━━━\n";
 
@@ -71,7 +71,7 @@ class DeliveryTemplate {
         
         $msg .= "━━━━━━━━━━━━━━━━━━━\n";
         $msg .= "🔑 <b>Vui lòng xem tài khoản trong file .txt phía dưới</b>\n\n";
-        $msg .= "Cảm ơn bạn đã mua hàng! 🙏";
+        $msg .= "🙏 Cảm ơn bạn đã mua hàng!";
         
         return $msg;
     }
@@ -100,7 +100,7 @@ class DeliveryTemplate {
         
         $msg .= "━━━━━━━━━━━━━━━━━━━\n";
         $msg .= "🔑 <b>Vui lòng xem tài khoản trong file .txt phía dưới</b>\n\n";
-        $msg .= "Cảm ơn bạn đã mua hàng! 🙏";
+        $msg .= "🙏 Cảm ơn bạn đã mua hàng!";
         
         return $msg;
     }
@@ -111,7 +111,7 @@ class DeliveryTemplate {
     private static function renderQRDefault($order, $product, $accounts) {
         $msg = "🎉 <b>THANH TOÁN THÀNH CÔNG!</b>\n\n";
         $msg .= "📦 <b>Sản phẩm:</b> {$product['name']} x {$order['quantity']}\n";
-        $msg .= " <b>Số tiền:</b> " . number_format($order['total_price'], 0, ',', '.') . " VND\n\n";
+        $msg .= "💰 <b>Số tiền:</b> " . number_format($order['total_price'], 0, ',', '.') . " VND\n\n";
         $msg .= "📋 <b>Mã giao dịch:</b> <code>{$order['transaction_code']}</code>\n";
         $msg .= "⏰ " . date('d/m/Y H:i', strtotime($order['created_at'])) . "\n";
         $msg .= "━━━━━━━━━━━━━━━━━━━\n";
@@ -127,7 +127,7 @@ class DeliveryTemplate {
         
         $msg .= "━━━━━━━━━━━━━━━━━━━\n";
         $msg .= "🔑 <b>Vui lòng xem tài khoản trong file .txt phía dưới</b>\n\n";
-        $msg .= "Cảm ơn bạn đã mua hàng! 🙏";
+        $msg .= "🙏 Cảm ơn bạn đã mua hàng!";
         
         return $msg;
     }
@@ -154,7 +154,7 @@ class DeliveryTemplate {
         }
         $msg .= "━━━━━━━━━━━━━━━━━━━\n\n";
         $msg .= "🔑 <b>Vui lòng xem tài khoản trong file .txt phía dưới</b>\n\n";
-        $msg .= "Cảm ơn bạn đã mua hàng! 🙏";
+        $msg .= "🙏 Cảm ơn bạn đã mua hàng!";
         
         return $msg;
     }
@@ -189,7 +189,7 @@ class DeliveryTemplate {
         
         $msg .= "━━━━━━━━━━━━━━━━━━━\n";
         $msg .= "🔑 <b>Vui lòng xem tài khoản trong file .txt phía dưới</b>\n\n";
-        $msg .= "Cảm ơn bạn đã mua hàng! 🙏";
+        $msg .= "🙏 Cảm ơn bạn đã mua hàng!";
         
         return $msg;
     }
@@ -223,7 +223,7 @@ class DeliveryTemplate {
         
         $msg .= "━━━━━━━━━━━━━━━━━━━\n\n";
         $msg .= "🔑 <b>Vui lòng xem tài khoản trong file .txt phía dưới</b>\n\n";
-        $msg .= "Cảm ơn bạn đã mua hàng! 🙏";
+        $msg .= "🙏 Cảm ơn bạn đã mua hàng!";
         
         return $msg;
     }
