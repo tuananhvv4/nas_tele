@@ -134,20 +134,36 @@ while ((time() - $startTime) < 25) {
                         }
                         
                         // Get new balance
-                        $stmt = $pdo->prepare("SELECT wallet_balance FROM users WHERE id = ?");
+                        $stmt = $pdo->prepare("
+                            SELECT wallet_balance, username 
+                            FROM users 
+                            WHERE id = ?
+                        ");
                         $stmt->execute([$topup['user_id']]);
-                        $newBalance = $stmt->fetchColumn();
-                        
+                        $userData = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                        $newBalance = $userData['wallet_balance'];
+                        $userName   = $userData['username'];
+
+                        $createdAt = date('d/m/Y H:i:s');
+
                         $message = "✅ <b>NẠP TIỀN THÀNH CÔNG!</b>\n\n";
                         $message .= "💰 <b>Số tiền:</b> " . number_format($topup['amount'], 0, ',', '.') . " VNĐ\n";
                         $message .= "💳 <b>Số dư mới:</b> " . number_format($newBalance, 0, ',', '.') . " VNĐ\n\n";
                         $message .= "📋 <b>Mã GD:</b> <code>{$topup['transaction_code']}</code>\n";
-                        $message .= "⏰ " . date('d/m/Y H:i') . "\n\n";
+                        $message .= "⏰ " . $createdAt . "\n\n";
                         $message .= "━━━━━━━━━━━━━━━━━━━\n";
                         $message .= "🎉 Tiền đã được cộng vào ví của bạn!\n";
                         $message .= "Sử dụng /sodu để kiểm tra số dư.";
-                        
+
                         $bot->sendMessage($topup['telegram_id'], $message);
+
+                        $msg = "<b>User: {$userName}</b>\n";
+                        $msg .= "<b>Đã nạp " . number_format($topup['amount'], 0, ',', '.') . " VNĐ vào ví.</b>\n";
+                        $msg .= "Thời gian: {$createdAt}";
+
+                        $telegram->sendAdminMessage($msg);
+
                         echo "📤 Sent notification to user {$topup['telegram_id']}\n";
                     }
                 }
