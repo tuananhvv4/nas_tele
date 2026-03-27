@@ -148,7 +148,7 @@ class TelegramNotifier {
             $keyboard = [
                 'inline_keyboard' => [
                     [
-                        ['text' => '🛍️ Mua tiếp', 'callback_data' => 'mua'],
+                        ['text' => '🛍️ Mua tiếp', 'callback_data' => 'show_products'],
                         ['text' => '📋 Đơn hàng', 'callback_data' => 'my_orders']
                     ],
                     [
